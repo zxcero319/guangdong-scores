@@ -2,10 +2,1503 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="0;url=dist/guangdong_scores_viewer.html">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>广东教师招聘考试岗位竞争分析</title>
+<style>
+:root {
+  --bg: #f5f7fa;
+  --card: #fff;
+  --primary: #1a73e8;
+  --primary-light: #e8f0fe;
+  --text: #202124;
+  --text-secondary: #5f6368;
+  --border: #dadce0;
+  --hover: #f8f9fa;
+  --tag-bg: #e8f0fe;
+  --tag-text: #1a73e8;
+  --badge-green: #e6f4ea;
+  --badge-green-text: #1e8e3e;
+  --badge-red: #fce8e6;
+  --badge-red-text: #d93025;
+  --badge-yellow: #fef7e0;
+  --badge-yellow-text: #f9ab00;
+  --badge-orange: #fff3e0;
+  --badge-orange-text: #e65100;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.header {
+  background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+  color: #fff;
+  padding: 20px 32px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  text-align: center;
+}
+.header h1 { font-size: 22px; font-weight: 600; }
+.header .sub { font-size: 13px; opacity: .85; margin-top: 4px; }
+
+.container { max-width: 1500px; margin: 0 auto; padding: 20px 24px; }
+
+/* Stats bar */
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  text-align: center;
+}
+.stat-card .num { font-size: 24px; font-weight: 700; color: var(--primary); }
+.stat-card .label { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+/* Filter panel */
+.filter-panel {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  margin-bottom: 20px;
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+.filter-group { flex: 1; min-width: 200px; }
+.filter-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.filter-group select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  outline: none;
+  transition: border-color .2s;
+}
+.filter-group select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+/* District chips */
+.district-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.district-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.district-chip:hover { background: var(--hover); }
+.district-chip.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 500;
+}
+.district-chip .count {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.district-chip.active .count { color: var(--primary); }
+
+.district-actions {
+  margin-bottom: 6px;
+  display: flex;
+  gap: 8px;
+}
+.district-actions button {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.district-actions button:hover { background: var(--hover); }
+
+/* Toggle row */
+.toggle-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  align-items: center;
+}
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.toggle-item input { cursor: pointer; }
+
+/* Search */
+#searchInput {
+  width: 200px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  margin-left: auto;
+}
+#searchInput:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+/* Position search dropdown */
+#posSearchWrap { position: relative; max-width: 180px; }
+#posSearch { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box; }
+#posSearch:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
+#posDropdown { display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 260px; overflow-y: auto; background: #fff; border: 1px solid var(--border); border-top: none; border-radius: 0 0 6px 6px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+#posDropdown.show { display: block; }
+#posDropdown .pos-item { padding: 7px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+#posDropdown .pos-item:hover { background: var(--primary-light); }
+#posDropdown .pos-item:last-child { border-bottom: none; }
+.no-pos-match { padding: 7px 12px; color: #999; font-size: 13px; }
+
+/* Table */
+.table-container {
+  background: var(--card);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  overflow: hidden;
+}
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.table-header .info { font-size: 14px; color: var(--text-secondary); }
+.table-header .info strong { color: var(--text); }
+
+.table-scroll { overflow-x: auto; }
+.table-scroll-top {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.table-scroll-top div { height: 1px; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+thead th {
+  background: #fafafa;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+}
+thead th:hover { color: var(--primary); }
+thead th .sort-icon { margin-left: 4px; font-size: 10px; color: inherit; }
+tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--hover); }
+.row-nt { background:#f2f3f5 !important; }
+.row-nt:hover { background:#e5e6e8 !important; }
+.row-nt td { color:#888; }
+tbody tr.school-uncertain { color: #e74c3c; font-weight: 500; cursor: help; border-bottom: 1px dotted #e74c3c; }
+
+.row-hot { background: #fff3e0; }
+tbody tr.row-hot:hover { background: #ffe0b2; }
+
+.score { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ratio-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 40px;
+  text-align: center;
+}
+.ratio-low { background: #e6f4ea; color: #1e8e3e; }
+.ratio-mid { background: #fef7e0; color: #e37400; }
+.ratio-high { background: #fce8e6; color: #d93025; }
+.ratio-na { background: #f1f3f4; color: #9aa0a6; }
+.推定-badge { color: #d93025; font-size: 10px; font-weight: 700; cursor: help; vertical-align: super; }
+
+.num-cell { font-variant-numeric: tabular-nums; text-align: center; }
+.wc-shared, .ic-shared { color:#2471a3; border-bottom:2px dotted #2471a3; cursor:help; font-weight:500; }
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.pagination button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all .15s;
+}
+.pagination button:hover:not(:disabled) {
+  background: var(--primary-light);
+  border-color: var(--primary);
+}
+.pagination button:disabled { opacity: .4; cursor: default; }
+.pagination button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.pagination .page-info { font-size: 13px; color: var(--text-secondary); margin: 0 8px; }
+.pagination select { padding: 6px 8px; border: 1px solid #dadce0; border-radius: 6px; font-size: 13px; }
+
+.export-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.export-btn:hover { background: var(--primary-light); }
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-secondary);
+}
+
+/* Tooltip */
+[title] { cursor: default; }
+
+/* ===== Favorites Modal ===== */
+.fav-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+}
+.fav-modal-overlay.open { display: flex; }
+
+.fav-modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.2);
+  width: 100%;
+  max-width: 1400px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fav-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 2px solid #f0c040;
+  background: #fffbe6;
+  flex-shrink: 0;
+}
+.fav-modal-header h2 {
+  font-size: 17px;
+  color: #b8860b;
+  margin: 0;
+}
+.fav-modal-header .fav-modal-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.fav-modal-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #999;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.fav-modal-close:hover { color: #333; background: #f0f0f0; }
+
+.fav-modal-body {
+  overflow: auto;
+  flex: 1;
+  padding: 0;
+}
+
+.fav-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.fav-compare-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.fav-compare-table th {
+  background: #f8f9fa;
+  border-bottom: 2px solid #dadce0;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #5f6368;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.fav-compare-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eee;
+}
+.fav-compare-table tbody tr:hover { background: #f8f9fa; }
+.fav-compare-table .fav-del-cell {
+  text-align: center;
+  cursor: pointer;
+  color: #c0392b;
+  font-size: 14px;
+  width: 28px;
+}
+.fav-compare-table .fav-del-cell:hover { background: #fce8e6; }
+.fav-compare-table .ratio-badge { font-size: 12px; }
+.fav-compare-table .row-nt td { color: #888; }
+
+.fav-empty {
+  text-align: center;
+  padding: 48px;
+  color: #999;
+}
+.fav-empty .big-star { font-size: 48px; display: block; margin-bottom: 12px; }
+
+/* ===== Tablet / iPad 适配 ===== */
+/* ≤1024px: iPad Pro 竖屏 + 所有 iPad 横屏 */
+@media (max-width: 1024px) {
+  .container { padding: 12px 16px; }
+  .header { padding: 14px 16px; }
+  .header h1 { font-size: 18px; }
+  .header .sub { font-size: 12px; }
+
+  /* 过滤器垂直堆叠 */
+  .filter-row { flex-direction: column; gap: 10px; }
+  .filter-row .filter-group { max-width: 100% !important; min-width: 0; }
+  .filter-group select { font-size: 16px; padding: 10px 12px; }  /* ≥16px 防 iOS 缩放 */
+  .filter-group label { font-size: 14px; }
+
+  /* 辖区 chips — 增大触控面积 */
+  .district-chip {
+    padding: 8px 14px;
+    font-size: 14px;
+    border-radius: 20px;
+    min-height: 44px;  /* Apple HIG 最小触摸目标 */
+    display: inline-flex;
+    align-items: center;
+  }
+  .district-chip .count { font-size: 12px; }
+
+  /* 搜索框 */
+  #searchInput { width: 100%; margin-left: 0; font-size: 16px; padding: 10px 12px; }
+  #posSearchWrap { max-width: 100%; }
+  #posSearch { font-size: 16px; padding: 10px 12px; }
+
+  /* 统计卡片 — 竖屏2列 */
+  .stats-bar { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 12px 10px; }
+  .stat-card .num { font-size: 20px; }
+  .stat-card .label { font-size: 12px; }
+
+  /* 表格 — iOS Safari sticky 在 overflow-x:auto 内失效, 用 -webkit-sticky + 降级 */
+  thead th { position: -webkit-sticky; position: sticky; font-size: 12px; padding: 8px 8px; }
+  tbody td { padding: 8px 8px; font-size: 13px; }
+  table { font-size: 13px; }
+
+  /* 分页 — 增大按钮 */
+  .pagination button { padding: 10px 14px; font-size: 14px; min-height: 44px; }
+  .pagination select { padding: 10px 8px; font-size: 14px; min-height: 44px; }
+
+  /* 导出按钮 */
+  .export-btn { padding: 10px 18px; font-size: 14px; min-height: 44px; }
+
+  /* 切换行 */
+  .toggle-row { gap: 12px; }
+  .toggle-item { font-size: 14px; }
+
+  /* 水印 — 隐藏避免遮挡内容 */
+  body > div[style*="position:fixed"][style*="writing-mode:vertical-rl"] { display: none; }
+
+  /* 收藏弹窗 — 全宽 */
+  .fav-modal { max-width: 100%; max-height: 90vh; border-radius: 8px; }
+  .fav-modal-overlay { padding: 8px; }
+  .fav-compare-table { font-size: 12px; }
+  .fav-compare-table th,
+  .fav-compare-table td { padding: 6px 8px; }
+}
+
+/* ≤768px: iPad Mini 竖屏 + 小 iPad 竖屏 */
+@media (max-width: 768px) {
+  .container { padding: 8px 10px; }
+
+  /* 表头工具栏 — 垂直排列 */
+  .table-header { flex-direction: column; gap: 8px; align-items: stretch; }
+  .table-header .info { text-align: center; }
+  .table-header .export-btn { align-self: center; }
+
+  /* 统计卡片 — 小屏仍保持2列 */
+  .stats-bar { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .stat-card .num { font-size: 18px; }
+
+  /* 辖区 chips 两列布局 */
+  .district-list { max-height: 200px; }
+  .district-actions button { font-size: 13px; padding: 6px 12px; }
+
+  /* 表格单元格 — 紧凑 */
+  tbody td { padding: 6px 6px; font-size: 12px; }
+  thead th { padding: 6px 6px; font-size: 11px; }
+
+  /* 分页 — 简化 */
+  .pagination { gap: 2px; }
+  .pagination button { padding: 8px 10px; font-size: 13px; min-height: 40px; }
+  .pagination .page-info { display: none; }  /* "共 N 页" 文字隐藏节省空间 */
+}
+
+
+/* 批次标签 */
+.batch-badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600;margin-left:5px;vertical-align:middle;}
+.batch-badge.current{background:#e8f5e9;color:#2e7d32;}
+.batch-badge.previous{background:#fff3e0;color:#e65100;}
+.batch-badge.historical{background:#e8f5e9;color:#2e7d32;}
+/* 展开行 */
+tr.expandable-row{cursor:pointer;}
+tr.expandable-row:hover{background:#f0f4ff !important;}
+tr.expandable-row.expanded{background:#e8f0fe !important;}
+tr.expand-detail-row td{padding:8px 16px 12px;background:#fafbfc;border-bottom:2px solid #e0e0e0;}
+.expand-fields{display:flex;flex-wrap:wrap;gap:5px;align-items:flex-start;}
+.expand-field-btn{display:inline-block;padding:2px 9px;background:#fff;border:1px solid #dadce0;border-radius:4px;cursor:pointer;font-size:11px;color:#555;white-space:nowrap;transition:all .15s;}
+.expand-field-btn:hover{background:#e8f0fe;border-color:#1a73e8;color:#1a73e8;}
+.expand-field-btn.active{background:#1a73e8;color:#fff;border-color:#1a73e8;}
+.expand-field-content{display:none;margin-top:6px;padding:6px 10px;background:#fff;border-left:3px solid #1a73e8;font-size:12px;line-height:1.7;max-height:180px;overflow-y:auto;word-break:break-all;color:#333;}
+.expand-field-content.show{display:block;}
+/* 批次筛选按钮 */
+.filter-btn-batch{padding:4px 12px;border:1px solid #1a73e8;border-radius:14px;background:#fff;color:#1a73e8;cursor:pointer;font-size:12px;margin-left:6px;transition:all .15s;outline:none;vertical-align:middle;}
+.filter-btn-batch:hover{background:#e8f0fe;}
+.filter-btn-batch.active{background:#1a73e8;color:#fff;}
+.filter-btn-batch.prev-active{background:#e65100;color:#fff;border-color:#e65100;}
+.filter-btn-batch.hist-active{background:#2e7d32;color:#fff;border-color:#2e7d32;}
+</style>
 </head>
 <body>
-<p>正在跳转... <a href="dist/guangdong_scores_viewer.html">如果没有自动跳转请点这里</a></p>
+
+<div class="header">
+  <h1>广东教师招聘考试岗位竞争分析</h1>
+  <div class="sub">数据截止 2026-07-09 · 按学校+岗位聚合</div>
+</div>
+
+<div class="container">
+  <!-- Stats Bar -->
+  <div class="stats-bar" id="statsBar"></div>
+
+  <!-- Filter Panel -->
+  <div class="filter-panel">
+    <div class="filter-row">
+      <div class="filter-group" style="max-width:220px;">
+        <label>城市</label>
+        <select id="citySelect">
+          <option value="">全部城市</option>
+        </select>
+      </div>
+      <div class="filter-group" style="flex:2;">
+        <label>辖区</label>
+        <div class="district-actions">
+          <button onclick="selectAllDistricts()">全选</button>
+          <button onclick="clearDistricts()">清除</button>
+        </div>
+        <div class="district-list" id="districtList">
+          <span style="color:#999;font-size:13px;">请先选择城市</span>
+        </div>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <div class="filter-group" style="max-width:130px;">
+        <label>年份</label>
+        <select id="yearFilter" onchange="applyFilters()">
+          <option value="">全部年份</option>
+        </select>
+      </div>
+      <div class="filter-group" style="max-width:160px;">
+        <label>学段</label>
+        <select id="stageFilter" onchange="applyFilters()">
+          <option value="">全部学段</option>
+        </select>
+      </div>
+      <div class="filter-group" style="max-width:140px;">
+        <label>学历要求</label>
+        <select id="eduFilter" onchange="applyFilters()">
+          <option value="">全部学历</option>
+        </select>
+      </div>
+      <div class="filter-group" style="max-width:140px;">
+        <label>招聘范围</label>
+        <select id="scopeFilter" onchange="applyFilters()">
+          <option value="">全部</option>
+          <option value="赴高校">赴高校</option>
+          <option value="社会人员">社会人员</option>
+          <option value="应届生">应届生</option>
+          <option value="不限">不限</option>
+        </select>
+      </div>
+      <div class="filter-group" style="max-width:180px;">
+        <label>岗位搜索</label>
+        <div id="posSearchWrap">
+          <input type="text" id="posSearch" placeholder="输入岗位关键词..." oninput="filterPosDropdown()" onfocus="showPosDropdown()" autocomplete="off">
+          <div id="posDropdown"></div>
+        </div>
+      </div>
+      <input type="text" id="searchInput" placeholder="搜索学校/岗位..." oninput="applyFilters()">
+     <span style="white-space:nowrap"><button id="btnBatchCurrent" class="filter-btn-batch" onclick="filterBatch('current')" title="筛选本次更新岗位">本次更新</button> <button id="btnBatchPrevious" class="filter-btn-batch" onclick="filterBatch('previous')" title="筛选上次更新岗位" style="margin-left:2px;">上次更新</button> <button id="btnBatchHistorical" class="filter-btn-batch" onclick="filterBatch('historical')" title="筛选往年数据更新岗位" style="margin-left:2px;">往年数据更新</button></span>
+</div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-container">
+    <div class="table-header">
+      <span class="info" id="tableInfo">加载中...</span>
+      <button class="export-btn" onclick="exportCSV()">导出 CSV</button>
+        <button class="export-btn" onclick="toggleFavPanel()" id="favBtn" style="background:#f0f0f0;color:#333">☆ 收藏夹 (<span id="favCount">0</span>)</button>
+    </div>
+    <div class="table-scroll-top" id="topScroll"><div></div></div>
+    <div class="table-scroll" id="tableScroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px;text-align:center" title="点击切换全部收藏">⭐</th>
+            <th data-sort="c" onclick="setSort('c')">城市 <span class="sort-icon"></span></th>
+            <th data-sort="d" onclick="setSort('d')">辖区 <span class="sort-icon"></span></th>
+            <th data-sort="sc" onclick="setSort('sc')">学校 <span class="sort-icon"></span></th>
+            <th data-sort="p" onclick="setSort('p')">岗位 <span class="sort-icon"></span></th>
+            <th data-sort="st" onclick="setSort('st')">学段 <span class="sort-icon"></span></th>
+            <th data-sort="yr" onclick="setSort('yr')">年份 <span class="sort-icon"></span></th>
+            <th data-sort="edu" onclick="setSort('edu')">学历要求 <span class="sort-icon"></span></th>
+            <th data-sort="rs" onclick="setSort('rs')">招聘范围 <span class="sort-icon"></span></th>
+            <th data-sort="pr" onclick="setSort('pr')" title="该岗位最终拟聘人数（通过体检人数）">计划招聘 <span class="sort-icon"></span></th>
+            <th data-sort="ms" onclick="setSort('ms')" title="进入面试考生的最低笔试成绩">最低进面分 <span class="sort-icon"></span></th>
+            <th data-sort="ts" onclick="setSort('ts')" title="笔试×40%+面试×60%的加权总分最低值">最低综合分 <span class="sort-icon"></span></th>
+            <th data-sort="wc" onclick="setSort('wc')" title="参加笔试的考生人数">笔试人数 <span class="sort-icon"></span></th>
+            <th data-sort="ic" onclick="setSort('ic')" title="参加面试的考生人数">面试人数 <span class="sort-icon"></span></th>
+            <th data-sort="wr" onclick="setSort('wr')" title="笔试人数 ÷ 计划招聘人数">笔试竞争比 <span class="sort-icon"></span></th>
+            <th data-sort="ir" onclick="setSort('ir')" title="面试人数 ÷ 计划招聘人数">面试竞争比 <span class="sort-icon"></span></th>
+            <th data-sort="b" onclick="setSort('b')" style="display:none">批次 <span class="sort-icon"></span></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <!-- Favorites Modal -->
+    <div class="fav-modal-overlay" id="favModal">
+      <div class="fav-modal">
+        <div class="fav-modal-header">
+          <h2>★ 收藏夹岗位对比（<span id="favPanelCount">0</span>）</h2>
+          <div class="fav-modal-actions">
+            <button onclick="clearAllFavs()" style="background:#fff;color:#c0392b;border:1px solid #c0392b;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px">清除全部</button>
+            <button class="fav-modal-close" onclick="closeFavModal()" title="关闭">✕</button>
+          </div>
+        </div>
+        <div class="fav-modal-body" id="favModalBody">
+          <div class="fav-empty"><span class="big-star">☆</span>暂无收藏，点击表格行前的 ☆ 即可添加岗位到收藏夹</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pagination" id="pagination"></div>
+  </div>
+</div>
+
+<script>
+// ===== DATA (loaded from CDN) =====
+var ALL_DATA = [];
+var CITY_DISTRICTS = {};
+var CITY_ORDER = [];
+
+// ===== STATE =====
+var filteredData = [];
+var currentPage = 1;
+var pageSize = 30;
+var sortKey = null;
+var sortAsc = true;
+var selectedDistricts = {};
+
+// ===== INIT =====
+function init() {
+  try {
+  // Populate city dropdown
+    var sel = document.getElementById('citySelect');
+    CITY_ORDER.forEach(function(c) {
+      var opt = document.createElement('option');
+      opt.value = c;
+      var dcount = CITY_DISTRICTS[c] ? CITY_DISTRICTS[c].length : 0;
+      opt.textContent = c + ' (' + dcount + '区)';
+      sel.appendChild(opt);
+    });
+  
+    // Populate stage/year/position filters
+    var stages = {};
+    var years = {};
+    var subjects = {};  // For position search dropdown
+    ALL_DATA.forEach(function(r, i) {
+      r._rid = i;
+      if (r.st) stages[r.st] = (stages[r.st]||0) + 1;
+      if (r.su) subjects[r.su] = (subjects[r.su]||0) + 1;
+      if (r.yr) {
+        // Handle multi-year (e.g. "2025、2026")
+        String(r.yr||'').split('、').forEach(function(y) {
+          if (y) years[y] = (years[y]||0) + 1;
+        });
+      }
+    });
+    // Store sorted subjects for position search dropdown
+    window._posOptions = Object.entries(subjects).sort(function(a,b){return b[1]-a[1];});
+    var yearSel = document.getElementById('yearFilter');
+    Object.entries(years).sort(function(a,b){return b[0]-a[0];}).forEach(function(e){
+      var opt = document.createElement('option');
+      opt.value = e[0];
+      opt.textContent = e[0] + '年 (' + e[1] + ')';
+      yearSel.appendChild(opt);
+    });
+    var stageSel = document.getElementById('stageFilter');
+    Object.entries(stages).sort(function(a,b){return b[1]-a[1];}).forEach(function(e){
+      var opt = document.createElement('option');
+      opt.value = e[0];
+      opt.textContent = e[0] + ' (' + e[1] + ')';
+      stageSel.appendChild(opt);
+    });
+
+    // Populate education filter
+    var edus = {};
+    ALL_DATA.forEach(function(r) {
+      if (r.edu && r.edu !== '-') edus[r.edu] = (edus[r.edu]||0) + 1;
+    });
+    var eduSel = document.getElementById('eduFilter');
+    Object.entries(edus).sort(function(a,b){return b[1]-a[1];}).forEach(function(e){
+      var opt = document.createElement('option');
+      opt.value = e[0];
+      opt.textContent = e[0] + ' (' + e[1] + ')';
+      eduSel.appendChild(opt);
+    });
+  
+    applyFilters();
+  } catch(e) { console.error("init error:", e); }
+
+}
+
+// ===== DISTRICT UI =====
+function updateDistricts() {
+  var city = document.getElementById('citySelect').value;
+  var container = document.getElementById('districtList');
+  selectedDistricts = {};
+  container.innerHTML = '';
+
+  if (!city) {
+    container.innerHTML = '<span style="color:#999;font-size:13px;">选择城市后可多选辖区</span>';
+    applyFilters();
+    return;
+  }
+
+  var districts = CITY_DISTRICTS[city] || [];
+  districts.forEach(function(d) {
+    var chip = document.createElement('span');
+    chip.className = 'district-chip';
+    chip.textContent = d[0];
+    chip.onclick = function() {
+      // Single-select: deselect all other chips first
+      var wasActive = chip.classList.contains('active');
+      document.querySelectorAll('#districtList .district-chip').forEach(function(c) { c.classList.remove('active'); });
+      selectedDistricts = {};
+      if (!wasActive) {
+        chip.classList.add('active');
+        selectedDistricts[d[0]] = true;
+      }
+      applyFilters();
+    };
+    container.appendChild(chip);
+  });
+
+  // Immediately apply city filter (districts pre-selected = none)
+  applyFilters();
+}
+
+function selectAllDistricts() {
+  document.querySelectorAll('#districtList .district-chip').forEach(function(chip) {
+    chip.classList.add('active');
+  });
+  var city = document.getElementById('citySelect').value;
+  (CITY_DISTRICTS[city] || []).forEach(function(d) { selectedDistricts[d[0]] = true; });
+  applyFilters();
+}
+
+function clearDistricts() {
+  document.querySelectorAll('#districtList .district-chip').forEach(function(chip) {
+    chip.classList.remove('active');
+  });
+  selectedDistricts = {};
+  applyFilters();
+}
+
+// ===== FILTERS =====
+function applyFilters() {
+  var city = document.getElementById('citySelect').value;
+  var yearF = document.getElementById('yearFilter').value;
+  var stageF = document.getElementById('stageFilter').value;
+  var eduF = document.getElementById('eduFilter').value;
+  var scopeF = document.getElementById('scopeFilter').value;
+  var search = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  var posF = (document.getElementById('posSearch').value || '').trim().toLowerCase();
+  var hasDistrictFilter = Object.keys(selectedDistricts).length > 0;
+
+  filteredData = ALL_DATA.filter(function(r) {
+    if (city && r.c !== city) return false;
+    if (hasDistrictFilter && !selectedDistricts[r.d]) return false;
+    if (yearF && (!r.yr || String(r.yr||'').split('、').indexOf(yearF) === -1)) return false;
+    if (stageF && r.st !== stageF) return false;
+    if (eduF && r.edu !== eduF) return false;
+    if (scopeF && r.rs !== scopeF) return false;
+    if (posF && (!r.su || r.su.toLowerCase().indexOf(posF) === -1)) return false;
+    if (currentBatchFilter && r._batch !== currentBatchFilter) return false;
+    if (search) {
+      var haystack = (r.sc + ' ' + r.p + ' ' + r.st + ' ' + r.edu + ' ' + (r.rs||'') + ' ' + r.yr + ' ' + r.b).toLowerCase();
+      if (haystack.indexOf(search) === -1) return false;
+    }
+    return true;
+  });
+
+  currentPage = 1;
+  updateStats();
+  if (sortKey) sortData();
+  renderTable();
+}
+
+// ===== STATS =====
+function updateStats() {
+  var total = filteredData.length;
+  var withWritten = filteredData.filter(function(r){return r.wc > 0;}).length;
+  var withInterview = filteredData.filter(function(r){return r.ic > 0;}).length;
+  var withBoth = filteredData.filter(function(r){return r.wc > 0 && r.ic > 0;}).length;
+
+  // Average competition ratios
+  var sumWr = 0, sumIr = 0, wrCount = 0, irCount = 0;
+  filteredData.forEach(function(r){
+    if (r.wr != null) { sumWr += r.wr; wrCount++; }
+    if (r.ir != null) { sumIr += r.ir; irCount++; }
+  });
+  var avgWr = wrCount > 0 ? (sumWr / wrCount).toFixed(1) : '-';
+  var avgIr = irCount > 0 ? (sumIr / irCount).toFixed(1) : '-';
+  var totalPositions = filteredData.reduce(function(s,r){return s + (r.pr||0);}, 0);
+  var cities = (new Set(filteredData.map(function(r){return r.c;}))).size;
+
+  document.getElementById('statsBar').innerHTML =
+    '<div class="stat-card"><div class="num">' + total.toLocaleString() + '</div><div class="label">岗位数</div></div>' +
+    '<div class="stat-card"><div class="num">' + totalPositions.toLocaleString() + '</div><div class="label">拟聘总人数</div></div>' +
+    '<div class="stat-card"><div class="num">' + cities + '</div><div class="label">覆盖城市</div></div>' +
+    '<div class="stat-card"><div class="num">' + Math.round(withWritten/total*100) + '%</div><div class="label">有笔试数据</div></div>' +
+    '<div class="stat-card"><div class="num">' + Math.round(withInterview/total*100) + '%</div><div class="label">有面试数据</div></div>' +
+    '<div class="stat-card"><div class="num">' + avgWr + ':1</div><div class="label">平均笔试竞争比</div></div>' +
+    '<div class="stat-card"><div class="num">' + avgIr + ':1</div><div class="label">平均面试竞争比</div></div>';
+}
+
+// ===== SORT =====
+function setSort(key) {
+  if (sortKey === key) {
+    // Three-state: asc ▲ → desc ▼ → reset (no sort)
+    if (!sortAsc) {
+      // Currently descending → reset to default order
+      sortKey = null;
+      sortAsc = true;
+    } else {
+      // Currently ascending → switch to descending
+      sortAsc = false;
+    }
+  } else {
+    // Different column: start ascending
+    sortKey = key;
+    sortAsc = true;
+  }
+  sortData();
+  renderTable();
+  // Update sort icons
+  document.querySelectorAll('thead th').forEach(function(th) {
+    var icon = th.querySelector('.sort-icon');
+    if (icon) icon.textContent = '';
+  });
+  if (sortKey) {
+    var activeTh = document.querySelector('thead th[data-sort="' + sortKey + '"]');
+    if (activeTh) {
+      activeTh.querySelector('.sort-icon').textContent = sortAsc ? '▲' : '▼';
+    }
+  }
+}
+
+function sortData() {
+  if (!sortKey) {
+    // Reset: restore original ALL_DATA order by _rid
+    filteredData.sort(function(a, b) {
+      return (a._rid || 0) - (b._rid || 0);
+    });
+    return;
+  }
+  filteredData.sort(function(a, b) {
+    var va = a[sortKey], vb = b[sortKey];
+    if (va == null && vb == null) return 0;
+    if (va == null) return sortAsc ? 1 : -1;
+    if (vb == null) return sortAsc ? -1 : 1;
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+}
+
+// ===== RENDER TABLE =====
+function formatScore(v) {
+  if (v == null || v === 0) return '<span style="color:#ccc">-</span>';
+  return '<span class="score">' + v.toFixed(2) + '</span>';
+}
+
+function formatRatio(v) {
+  if (v == null) return '<span class="ratio-badge ratio-na">-</span>';
+  var cls = v <= 3 ? 'ratio-low' : (v <= 8 ? 'ratio-mid' : 'ratio-high');
+  var display = Number.isInteger(v) ? v.toString() : v.toFixed(1);
+  return '<span class="ratio-badge ' + cls + '">' + display + ':1</span>';
+}
+
+function formatScope(v) {
+  if (!v || v === '不限') {
+    return '不限<sup class="推定-badge" title="原始招聘公告未标注报考身份，本工具推定为不限，仅供参考，以官方公告为准">推定</sup>';
+  }
+  return v;
+}
+
+function formatCount(v) {
+  if (v == null || v === 0) return '<span style="color:#ccc">-</span>';
+  return '<span class="num-cell">' + v + '</span>';
+}
+
+function formatPR(r) {
+  if (r.pr == null || r.pr === 0) return '<span style="color:#ccc">-</span>';
+  if (r.recruit_plan_source === 'infer_by_interview' && r.pr === 1) {
+    return '<span class="num-cell" style="color:#d93025;font-weight:700;cursor:help" title="依据面试人数=1估算，原始岗位表缺失，实际招录名额可能上浮">' + r.pr + '</span>';
+  }
+  return '<span class="num-cell">' + r.pr + '</span>';
+}
+
+// ===== FAVORITES =====
+var favorites = new Set();
+
+function toggleFav(rid, el) {
+  if (favorites.has(rid)) {
+    favorites.delete(rid);
+    if (el) el.textContent = '☆';
+  } else {
+    favorites.add(rid);
+    if (el) el.textContent = '★';
+  }
+  // Update all star cells for this rid (may appear on multiple pages)
+  var cells = document.querySelectorAll('[id="favCell' + rid + '"]');
+  cells.forEach(function(c) { c.textContent = favorites.has(rid) ? '★' : '☆'; });
+  updateFavUI();
+}
+
+function openFavModal() {
+  var modal = document.getElementById('favModal');
+  if (!modal) return;
+  modal.classList.add('open');
+  renderFavCompareTable();
+}
+
+function closeFavModal() {
+  var modal = document.getElementById('favModal');
+  if (modal) modal.classList.remove('open');
+}
+
+// Click backdrop to close
+document.addEventListener('click', function(e) {
+  if (e.target.id === 'favModal') closeFavModal();
+});
+
+function toggleFavPanel() {
+  var modal = document.getElementById('favModal');
+  if (!modal) return;
+  if (modal.classList.contains('open')) {
+    closeFavModal();
+  } else {
+    openFavModal();
+  }
+}
+
+function updateFavUI() {
+  var cnt = favorites.size;
+  var fc = document.getElementById('favCount');
+  if (fc) fc.textContent = cnt;
+  var fpc = document.getElementById('favPanelCount');
+  if (fpc) fpc.textContent = cnt;
+  var btn = document.getElementById('favBtn');
+  if (btn) btn.innerHTML = (cnt > 0 ? '★' : '☆') + ' 收藏夹 (<span id="favCount">' + cnt + '</span>)';
+  // Refresh comparison table if modal is open
+  var modal = document.getElementById('favModal');
+  if (modal && modal.classList.contains('open')) {
+    renderFavCompareTable();
+  }
+}
+
+function renderFavCompareTable() {
+  var body = document.getElementById('favModalBody');
+  if (!body) return;
+  if (favorites.size === 0) {
+    body.innerHTML = '<div class="fav-empty"><span class="big-star">☆</span>暂无收藏，点击表格行前的 ☆ 即可添加岗位到收藏夹</div>';
+    return;
+  }
+  // Collect favorited records in the order they were added (by _rid for stability)
+  var items = [];
+  favorites.forEach(function(rid) {
+    var r = ALL_DATA[rid];
+    if (r) items.push({rid: rid, r: r});
+  });
+  // Sort by city then district for easier comparison
+  items.sort(function(a, b) {
+    if (a.r.c !== b.r.c) return (a.r.c || '').localeCompare(b.r.c || '', 'zh');
+    if (a.r.d !== b.r.d) return (a.r.d || '').localeCompare(b.r.d || '', 'zh');
+    return (a.r._rid || 0) - (b.r._rid || 0);
+  });
+
+  var cols = [
+    {key: 'c', label: '城市', w: '60px'},
+    {key: 'd', label: '辖区', w: '70px'},
+    {key: 'sc', label: '学校', w: '160px'},
+    {key: 'p', label: '岗位', w: '120px'},
+    {key: 'st', label: '学段', w: '55px'},
+    {key: 'yr', label: '年份', w: '55px'},
+    {key: 'edu', label: '学历要求', w: '80px'},
+    {key: 'pr', label: '计划招聘', w: '65px', cls: 'num'},
+    {key: 'ms', label: '最低进面分', w: '70px', cls: 'num'},
+    {key: 'wc', label: '笔试人数', w: '65px', cls: 'num'},
+    {key: 'ic', label: '面试人数', w: '65px', cls: 'num'},
+    {key: 'wr', label: '笔试竞争比', w: '75px', cls: 'ratio'},
+    {key: 'ir', label: '面试竞争比', w: '75px', cls: 'ratio'},
+    {key: 'b', label: '批次', w: '55px'}
+  ];
+
+  var headHtml = '<tr>' + cols.map(function(col) {
+    return '<th style="min-width:' + col.w + '">' + col.label + '</th>';
+  }).join('') + '<th style="width:28px"></th></tr>';
+
+  var rowsHtml = items.map(function(item) {
+    var r = item.r;
+    var rowClass = r.non_teacher ? ' row-nt' : '';
+    var cellsHtml = cols.map(function(col) {
+      var v = r[col.key];
+      var display;
+      if (col.cls === 'ratio') {
+        if (v == null) return '<td>-</td>';
+        var cls = v <= 3 ? 'ratio-low' : (v <= 8 ? 'ratio-mid' : 'ratio-high');
+        var disp = Number.isInteger(v) ? v.toString() : v.toFixed(1);
+        return '<td><span class="ratio-badge ' + cls + '">' + disp + ':1</span></td>';
+      }
+      if (col.cls === 'num') {
+        if (v == null || v === 0) return '<td>-</td>';
+        if (col.key === 'pr' && r.recruit_plan_source === 'infer_by_interview') {
+          return '<td><span style="color:#d93025;font-weight:700;cursor:help" title="依据面试人数=1估算，原始岗位表缺失">' + v + '</span></td>';
+        }
+        if (col.key === 'ms' && v != null) return '<td>' + v.toFixed(2) + '</td>';
+        return '<td>' + v + '</td>';
+      }
+      if (v == null || v === '') return '<td>-</td>';
+      // For sc (school), red highlight if school name uncertain
+      if (col.key === 'sc' && r._school_uncertain) {
+        return '<td><span class="school-uncertain" title="未找到对应学校名称，公告中统一标注为' + String(v).replace(/</g,'&lt;') + '">⚠ ' + String(v).replace(/</g,'&lt;') + '</span></td>';
+      }
+      return '<td>' + String(v).replace(/</g,'&lt;') + '</td>';
+    }).join('');
+    return '<tr class="' + rowClass + '">' + cellsHtml +
+      '<td class="fav-del-cell" onclick="removeFav(' + item.rid + ')" title="移除收藏">✕</td></tr>';
+  }).join('');
+
+  body.innerHTML = '<table class="fav-compare-table"><thead>' + headHtml + '</thead><tbody>' + rowsHtml + '</tbody></table>';
+}
+
+function removeFav(rid) {
+  favorites.delete(rid);
+  // Update star in table
+  var cells = document.querySelectorAll('[id="favCell' + rid + '"]');
+  cells.forEach(function(c) { c.textContent = '☆'; });
+  updateFavUI();
+  // If no more favorites, close the modal
+  if (favorites.size === 0) {
+    closeFavModal();
+  }
+}
+
+function clearAllFavs() {
+  if (favorites.size === 0) return;
+  if (!confirm('确定清除全部 ' + favorites.size + ' 条收藏？')) return;
+  // Reset all stars
+  favorites.forEach(function(rid) {
+    var cells = document.querySelectorAll('[id="favCell' + rid + '"]');
+    cells.forEach(function(c) { c.textContent = '☆'; });
+  });
+  favorites.clear();
+  updateFavUI();
+  closeFavModal();
+}
+
+// ===== POSITION SEARCH DROPDOWN =====
+function showPosDropdown() {
+  var dd = document.getElementById('posDropdown');
+  var input = document.getElementById('posSearch');
+  renderPosItems(input.value);
+  dd.classList.add('show');
+}
+function filterPosDropdown() {
+  var input = document.getElementById('posSearch');
+  renderPosItems(input.value);
+  document.getElementById('posDropdown').classList.add('show');
+  applyFilters();
+}
+function renderPosItems(filter) {
+  var dd = document.getElementById('posDropdown');
+  var opts = window._posOptions || [];
+  var f = (filter||'').trim().toLowerCase();
+  var matches = f ? opts.filter(function(e){return e[0].toLowerCase().indexOf(f) !== -1;}) : opts;
+  if (matches.length === 0) {
+    dd.innerHTML = '<div class="no-pos-match">无匹配岗位</div>';
+  } else {
+    dd.innerHTML = matches.map(function(e){
+      return '<div class="pos-item" onmousedown="selectPosItem(\'' + e[0].replace(/'/g,"\\'") + '\')">' + e[0] + ' (' + e[1] + ')</div>';
+    }).join('');
+  }
+}
+function selectPosItem(val) {
+  document.getElementById('posSearch').value = val;
+  document.getElementById('posDropdown').classList.remove('show');
+  applyFilters();
+}
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('posSearchWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('posDropdown').classList.remove('show');
+  }
+});
+
+function renderTable() {
+  var start = (currentPage - 1) * pageSize;
+  var page = filteredData.slice(start, start + pageSize);
+  var tbody = document.getElementById('tableBody');
+
+  if (page.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="18" class="empty-state">没有匹配的岗位记录</td></tr>';
+  } else {
+    tbody.innerHTML = page.map(function(r, idx) {
+      var hotClass = (r.wr != null && r.wr >= 10 ? ' row-hot' : '') + (r.non_teacher ? ' row-nt' : '');
+      return '<tr class="' + hotClass + '" data-batch="' + (r._batch||'') + '" data-age="' + (r._age_req||'') + '" data-political="' + (r._political||'') + '" data-major="' + (r._major_req||'') + '" data-title="' + (r._title_req||'') + '" data-other="' + (r._other_req||'') + '" data-edu="' + (r._edu_req||'') + '" data-degree="' + (r._degree_req||'') + '" data-pc="' + (r.position_code||'') + '" data-source-url="' + (r._source_url||'') + '">' +
+        '<td style="text-align:center;cursor:pointer;font-size:14px" onclick="toggleFav(' + r._rid + ',this)" id="favCell' + r._rid + '">' + (favorites.has(r._rid) ? '★' : '☆') + '</td>' +
+        '<td>' + (r.c || '-') + '</td>' +
+        '<td>' + (r.d || '-') + '</td>' +
+        '<td title="' + (r._school_uncertain ? '未找到对应学校名称，公告中统一标注为' + (r.sc||'') : (r.sc||'')) + '">' + (r._school_uncertain ? '<span class="school-uncertain">⚠ ' + (r.sc||'-') + '</span>' : (r.sc || '-')) + '</td>' +
+        '<td title="' + (r.p||'') + '">' + (r.p || '-') + '</td>' +
+        '<td>' + (r.st || '-') + '</td>' +
+        '<td>' + (r.yr || '-') + '</td>' +
+        '<td>' + (r.edu || '<span style="color:#888">-</span>') + '</td>' +
+        '<td>' + formatScope(r.rs) + '</td>' +
+        '<td class="num-cell">' + formatPR(r) + '</td>' +
+        '<td class="num-cell">' + formatScore(r.ms) + '</td>' +
+        '<td class="num-cell">' + formatScore(r.ts) + '</td>' +
+        '<td class="num-cell">' + (r._wc_shared ? '<span class="wc-shared" title="' + (r._wc_shared_info||'') + '">' + (r.wc||0) + '</span>' : formatCount(r.wc)) + '</td>' +
+        '<td class="num-cell">' + (r._ic_shared ? '<span class="ic-shared" title="' + (r._ic_shared_info||'') + '">' + (r.ic||0) + '</span>' : formatCount(r.ic)) + '</td>' +
+        '<td>' + formatRatio(r.wr) + '</td>' +
+        '<td>' + formatRatio(r.ir) + '</td>' +
+        '<td title="' + (r.b||'') + '" style="display:none">' + (r.b || '-') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  // Update info
+  var totalPages = Math.ceil(filteredData.length / pageSize);
+  document.getElementById('tableInfo').innerHTML =
+    '共 <strong>' + filteredData.length.toLocaleString() + '</strong> 个岗位' +
+    (totalPages > 1 ? ' · 第 ' + currentPage + '/' + totalPages + ' 页' : '');
+
+  // Pagination
+  renderPagination(totalPages);
+  setTimeout(syncTopScroll, 0);
+}
+
+function renderPagination(totalPages) {
+  var pg = document.getElementById('pagination');
+  if (totalPages <= 1) { pg.innerHTML = ''; return; }
+
+  var html = '';
+  html += '<button onclick="goPage(' + (currentPage-1) + ')" ' + (currentPage<=1?'disabled':'') + '>上一页</button>';
+
+  var maxButtons = 9;
+  var startP = Math.max(1, currentPage - Math.floor(maxButtons/2));
+  var endP = Math.min(totalPages, startP + maxButtons - 1);
+  if (endP - startP < maxButtons - 1) startP = Math.max(1, endP - maxButtons + 1);
+
+  if (startP > 1) {
+    html += '<button onclick="goPage(1)">1</button>';
+    if (startP > 2) html += '<button disabled>...</button>';
+  }
+
+  for (var p = startP; p <= endP; p++) {
+    html += '<button onclick="goPage(' + p + ')"' + (p===currentPage?' class="active"':'') + '>' + p + '</button>';
+  }
+
+  if (endP < totalPages) {
+    if (endP < totalPages - 1) html += '<button disabled>...</button>';
+    html += '<button onclick="goPage(' + totalPages + ')">' + totalPages + '</button>';
+  }
+
+  html += '<button onclick="goPage(' + (currentPage+1) + ')" ' + (currentPage>=totalPages?'disabled':'') + '>下一页</button>';
+  html += '<span class="page-info">共 ' + totalPages + ' 页</span>';
+  html += ' <select onchange="goPage(parseInt(this.value))">';
+  for (var p = 1; p <= totalPages; p++) {
+    html += '<option value="' + p + '"' + (p===currentPage?' selected':'') + '>' + p + '</option>';
+  }
+  html += '</select>';
+
+  pg.innerHTML = html;
+}
+
+function goPage(p) {
+  var totalPages = Math.ceil(filteredData.length / pageSize);
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  renderTable();
+  window.scrollTo(0, 0);
+}
+
+// ===== EXPORT =====
+function exportCSV() {
+  var headers = ['城市','辖区','学校','岗位','学段','报考学科限制','学科限制来源','年份','学历要求','招聘范围','计划招聘','最低进面分','最低综合分','笔试人数','面试人数','笔试竞争比','面试竞争比','批次','数据备注'];
+  var keys = ['c','d','sc','p','st','ssl','yr','edu','rs','pr','ms','ts','wc','ic','wr','ir','b','note'];
+  var lines = [headers.join(',')];
+  var start = (currentPage - 1) * pageSize;
+  var pageData = filteredData.slice(start, start + pageSize);
+  pageData.forEach(function(r) {
+    var row = keys.map(function(k) {
+      if (k === 'ssl') { var sslMap = {official:'公告标注', missing:'未检索到', unlimited:'不限学科'}; return sslMap[r.ssl] || ''; }
+        if (k === 'note') {
+	        var parts = [];
+	        if (r.note) parts.push(r.note);
+	        if (r.recruit_plan_source === 'infer_by_interview') parts.push('依据面试人数=1估算，原始岗位表缺失，实际招录名额可能上浮');
+	        return parts.join('; ');
+      }
+      var v = r[k];
+      if (v == null) return '';
+      var s = String(v).replace(/"/g, '""');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s + '"';
+      }
+      return s;
+    });
+    lines.push(row.join(','));
+  });
+
+  var BOM = '﻿';
+  var blob = new Blob([BOM + lines.join('\n')], {type: 'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'guangdong_competition_p' + currentPage + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ===== TOP SCROLLBAR SYNC =====
+function syncTopScroll() {
+  var top = document.getElementById('topScroll');
+  var bottom = document.getElementById('tableScroll');
+  if (!top || !bottom) return;
+  var table = bottom.querySelector('table');
+  if (table) {
+    top.firstElementChild.style.width = table.offsetWidth + 'px';
+  }
+}
+(function() {
+  var top = document.getElementById('topScroll');
+  var bottom = document.getElementById('tableScroll');
+  if (top && bottom) {
+    top.addEventListener('scroll', function() { bottom.scrollLeft = top.scrollLeft; });
+    bottom.addEventListener('scroll', function() { top.scrollLeft = bottom.scrollLeft; });
+  }
+})();
+
+// ===== EVENTS =====
+document.getElementById('citySelect').addEventListener('change', function() {
+  updateDistricts();
+});
+
+// ===== 批次筛选 + 展开行 =====
+var currentBatchFilter = "";
+
+function toggleExpandRow(el) {
+  var next = el.nextElementSibling;
+  if (next && (next.classList.contains("expand-detail-row") || next.classList.contains("expand-detail-card"))) {
+    next.remove(); el.classList.remove("expanded"); return;
+  }
+  el.classList.add("expanded");
+  var fields = [
+    {l:"年龄要求",v:el.getAttribute("data-age")||""},
+    {l:"政治面貌",v:el.getAttribute("data-political")||""},
+    {l:"学历要求",v:el.getAttribute("data-edu")||""},
+    {l:"学位要求",v:el.getAttribute("data-degree")||""},
+    {l:"专业要求",v:el.getAttribute("data-major")||""},
+    {l:"教师资格证",v:el.getAttribute("data-title")||""},
+    {l:"其他要求/备注",v:el.getAttribute("data-other")||""},
+    {l:"数据来源",v:el.getAttribute("data-source-url")||""},
+      {l:"岗位代码",v:el.getAttribute("data-pc")||""}
+  ];
+  var btns = "";
+  var hasAny = false;
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    if (!f.v || f.v.trim()==="") continue;
+    hasAny = true;
+    var fid = "fld_"+Math.random().toString(36).substr(2,8);
+    btns += '<span class="expand-field-btn active">'+f.l+'</span>';
+    btns += '<div class="expand-field-content show" id="'+fid+'">'+escapeHtml(f.v)+'</div>';
+  }
+  if (!hasAny) { el.classList.remove("expanded"); return; }
+  var cols = el.getElementsByTagName("td").length;
+  var dr = document.createElement("tr");
+  dr.className = "expand-detail-row";
+  var td = document.createElement("td");
+  td.colSpan = cols;
+  td.innerHTML = '<div class="expand-fields">'+btns+'</div>';
+  dr.appendChild(td);
+  el.parentNode.insertBefore(dr, el.nextSibling);
+}
+
+function toggleField(fid, btn) {
+  // No-op: all fields are visible by default in the new UI
+}
+
+function escapeHtml(t) {
+  var d = document.createElement("div");
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+function filterBatch(batch) {
+  var btnC = document.getElementById("btnBatchCurrent");
+  var btnP = document.getElementById("btnBatchPrevious");
+  var btnH = document.getElementById("btnBatchHistorical");
+  if (currentBatchFilter === batch) {
+    currentBatchFilter = "";
+    if (btnC) btnC.classList.remove("active");
+    if (btnP) btnP.classList.remove("prev-active");
+    if (btnH) btnH.classList.remove("hist-active");
+  } else {
+    currentBatchFilter = batch;
+    if (btnC) btnC.classList.remove("active");
+    if (btnP) btnP.classList.remove("prev-active");
+    if (btnH) btnH.classList.remove("hist-active");
+    if (batch === "current") {
+      if (btnC) btnC.classList.add("active");
+    } else if (batch === "previous") {
+      if (btnP) btnP.classList.add("prev-active");
+    } else if (batch === "historical") {
+      if (btnH) btnH.classList.add("hist-active");
+    }
+  }
+  applyFilters();
+}
+
+var _origApplyFilters = applyFilters;
+applyFilters = function() {
+  if (_origApplyFilters) _origApplyFilters();
+};
+
+var _origRender = renderTable;
+renderTable = function() {
+  var origFiltered = filteredData;
+  if (currentBatchFilter) {
+    filteredData = filteredData.filter(function(r) { return r._batch === currentBatchFilter; });
+  }
+  _origRender();
+
+  var tbody = document.getElementById("tableBody");
+  if (tbody) {
+    var rows = tbody.getElementsByTagName("tr");
+    for (var i = 0; i < rows.length; i++) {
+      var tr = rows[i];
+      if (tr.classList.contains("expand-detail-row")) continue;
+      tr.classList.add("expandable-row");
+      tr.onclick = function(e) {
+        if (e.target.tagName === "A" || e.target.tagName === "BUTTON" || e.target.classList.contains("expand-field-btn")) return;
+        toggleExpandRow(this);
+      };
+      var batch = tr.getAttribute("data-batch");
+      if (batch && batch !== "") {
+        var tds = tr.getElementsByTagName("td");
+        if (tds.length >= 5) {
+          var badge = document.createElement("span");
+          badge.className = "batch-badge " + batch;
+          badge.textContent = batch === "current" ? "本次" : (batch === "previous" ? "上次" : "往年");
+          tds[4].appendChild(badge);
+        }
+      }
+    }
+  }
+  filteredData = origFiltered;
+};
+
+
+// ===== DATA LOADING FROM CDN =====
+var DATA_URL = "https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json";
+
+function buildIndices() {
+  var cityDistricts = {};
+  var cityCounts = {};
+  ALL_DATA.forEach(function(r) {
+    if (r.c) cityCounts[r.c] = (cityCounts[r.c] || 0) + 1;
+    if (r.c && r.d) {
+      if (!cityDistricts[r.c]) cityDistricts[r.c] = {};
+      cityDistricts[r.c][r.d] = (cityDistricts[r.c][r.d] || 0) + 1;
+    }
+  });
+  CITY_ORDER = Object.entries(cityCounts).sort(function(a,b){return b[1]-a[1];}).map(function(e){return e[0];});
+  CITY_ORDER.forEach(function(city) {
+    var districts = cityDistricts[city] || {};
+    CITY_DISTRICTS[city] = Object.entries(districts).sort(function(a,b){return b[1]-a[1];});
+  });
+}
+
+function showLoading(msg) {
+  var tb = document.getElementById('tableBody');
+  if (tb) tb.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:60px;color:#5f6368;">'
+    + '<div style="font-size:48px;margin-bottom:16px;">&#128190;</div>'
+    + '<div style="font-size:16px;">' + (msg || '加载数据中...') + '</div></td></tr>';
+}
+
+function loadData() {
+  showLoading('正在从 CDN 加载数据...');
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', DATA_URL, true);
+  xhr.timeout = 30000;
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try {
+        var data = JSON.parse(xhr.responseText);
+        if (Array.isArray(data) && data.length > 0) {
+          ALL_DATA = data;
+          document.getElementById('tableInfo').textContent = '加载完成，共 ' + data.length.toLocaleString() + ' 条记录';
+          buildIndices();
+          init();
+          return;
+        }
+      } catch(e) { console.error(e); }
+    }
+    showError();
+  };
+  xhr.onerror = showError;
+  xhr.ontimeout = showError;
+  xhr.send();
+}
+
+function showError() {
+  var tb = document.getElementById('tableBody');
+  if (tb) tb.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:60px;color:#d93025;">'
+    + '<div style="font-size:48px;margin-bottom:16px;">&#9888;</div>'
+    + '<div style="font-size:16px;">数据加载失败，请检查网络连接后刷新页面</div>'
+    + '<div style="font-size:13px;margin-top:8px;color:#5f6368;">数据源: <a href="' + DATA_URL + '" target="_blank">' + DATA_URL + '</a></div>'
+    + '</td></tr>';
+}
+
+// Start loading
+loadData();
+
+</script>
+<footer style="text-align:center; padding:16px 20px; color:#94a3b8; font-size:13px; border-top:1px solid #e2e8f0; margin-top:24px; line-height:1.8">
+本工具为纯本地数据查询工具，所有数据均来自广东省人社厅/各市/区教育局官方公示文件。<br>
+数据仅供参考，不构成任何报考建议。最终报名请以官方系统公告为准。
+</footer>
+
+<!-- 左右两侧固定竖排文字 -->
+<div style="position:fixed; left:8px; top:50%; transform:translateY(-50%); writing-mode:vertical-rl; color:#cbd5e1; font-size:14px; letter-spacing:6px; pointer-events:none; z-index:999; user-select:none;">个人自制工具，禁止二次售卖。</div>
+<div style="position:fixed; right:8px; top:50%; transform:translateY(-50%); writing-mode:vertical-rl; color:#cbd5e1; font-size:14px; letter-spacing:6px; pointer-events:none; z-index:999; user-select:none;">个人自制工具，禁止二次售卖。</div>
+
+<!-- 版本更新提示 -->
+
 </body>
 </html>

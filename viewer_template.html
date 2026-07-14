@@ -683,12 +683,10 @@ tr.expand-detail-row td{padding:8px 16px 12px;background:#fafbfc;border-bottom:2
 </div>
 
 <script>
-// ===== EMBEDDED DATA =====
-var ALL_DATA = __DATA_PLACEHOLDER__;
-
-// ===== CITY/DISTRICT INDEX =====
-var CITY_DISTRICTS = __CITY_DIST_PLACEHOLDER__;
-	var CITY_ORDER = __CITY_ORDER_PLACEHOLDER__;
+// ===== DATA (loaded from CDN) =====
+var ALL_DATA = [];
+var CITY_DISTRICTS = {};
+var CITY_ORDER = [];
 
 // ===== STATE =====
 var filteredData = [];
@@ -1426,8 +1424,69 @@ renderTable = function() {
 };
 
 
-// Initialize
-init();
+// ===== DATA LOADING FROM CDN =====
+var DATA_URL = "https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json";
+
+function buildIndices() {
+  var cityDistricts = {};
+  var cityCounts = {};
+  ALL_DATA.forEach(function(r) {
+    if (r.c) cityCounts[r.c] = (cityCounts[r.c] || 0) + 1;
+    if (r.c && r.d) {
+      if (!cityDistricts[r.c]) cityDistricts[r.c] = {};
+      cityDistricts[r.c][r.d] = (cityDistricts[r.c][r.d] || 0) + 1;
+    }
+  });
+  CITY_ORDER = Object.entries(cityCounts).sort(function(a,b){return b[1]-a[1];}).map(function(e){return e[0];});
+  CITY_ORDER.forEach(function(city) {
+    var districts = cityDistricts[city] || {};
+    CITY_DISTRICTS[city] = Object.entries(districts).sort(function(a,b){return b[1]-a[1];});
+  });
+}
+
+function showLoading(msg) {
+  var tb = document.getElementById('tableBody');
+  if (tb) tb.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:60px;color:#5f6368;">'
+    + '<div style="font-size:48px;margin-bottom:16px;">&#128190;</div>'
+    + '<div style="font-size:16px;">' + (msg || '加载数据中...') + '</div></td></tr>';
+}
+
+function loadData() {
+  showLoading('正在从 CDN 加载数据...');
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', DATA_URL, true);
+  xhr.timeout = 30000;
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try {
+        var data = JSON.parse(xhr.responseText);
+        if (Array.isArray(data) && data.length > 0) {
+          ALL_DATA = data;
+          document.getElementById('tableInfo').textContent = '加载完成，共 ' + data.length.toLocaleString() + ' 条记录';
+          buildIndices();
+          init();
+          return;
+        }
+      } catch(e) { console.error(e); }
+    }
+    showError();
+  };
+  xhr.onerror = showError;
+  xhr.ontimeout = showError;
+  xhr.send();
+}
+
+function showError() {
+  var tb = document.getElementById('tableBody');
+  if (tb) tb.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:60px;color:#d93025;">'
+    + '<div style="font-size:48px;margin-bottom:16px;">&#9888;</div>'
+    + '<div style="font-size:16px;">数据加载失败，请检查网络连接后刷新页面</div>'
+    + '<div style="font-size:13px;margin-top:8px;color:#5f6368;">数据源: <a href="' + DATA_URL + '" target="_blank">' + DATA_URL + '</a></div>'
+    + '</td></tr>';
+}
+
+// Start loading
+loadData();
 
 </script>
 <footer style="text-align:center; padding:16px 20px; color:#94a3b8; font-size:13px; border-top:1px solid #e2e8f0; margin-top:24px; line-height:1.8">

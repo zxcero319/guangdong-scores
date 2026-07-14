@@ -22,9 +22,10 @@ scripts/*
 !scripts/_rebuild_viewer.py
 !scripts/_viewer_utils.py
 
-# dist/ 下只保留 viewer HTML
+# dist/ 下只保留 viewer HTML 和 data JSON
 dist/*
 !dist/guangdong_scores_viewer.html
+!dist/viewer_data.json
 
 # Python
 __pycache__/

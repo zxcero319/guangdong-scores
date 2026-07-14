@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-重建 guangdong_scores_viewer.html
+重建 guangdong_scores_viewer.html（数据分离架构）
 
-从 data/viewer_data.json 读取记录 → 构建城市/辖区索引 → 填充模板 → 输出 HTML
+HTML 从 jsDelivr CDN 加载 viewer_data.json，本地只需维护数据文件。
 
 用法:
-    python scripts/_rebuild_viewer.py           # 输出到 dist/
+    python scripts/_rebuild_viewer.py           # 输出到 dist/ 和根目录
     python scripts/_rebuild_viewer.py --check   # 仅校验数据不输出
 """
 import json, os, sys, re
@@ -14,11 +14,12 @@ from collections import Counter, defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_FILE = os.path.join(ROOT, "data", "viewer_data.json")
 TEMPLATE_FILE = os.path.join(ROOT, "viewer_template.html")
-OUTPUT_FILE = os.path.join(ROOT, "dist", "guangdong_scores_viewer.html")
+DIST_DATA = os.path.join(ROOT, "dist", "viewer_data.json")
+DIST_VIEWER = os.path.join(ROOT, "dist", "guangdong_scores_viewer.html")
+ROOT_VIEWER = os.path.join(ROOT, "index.html")
 
 
 def load_records(path=None):
-    """加载记录。path 省略则默认从 viewer_data.json 加载。"""
     path = path or DATA_FILE
     if not os.path.exists(path):
         raise FileNotFoundError("数据文件不存在: " + path)
@@ -27,139 +28,122 @@ def load_records(path=None):
 
 
 def save_records(records, path=None):
-    """保存记录到 viewer_data.json。"""
     path = path or DATA_FILE
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
+        json.dump(records, f, ensure_ascii=False, separators=(",", ":"))
     print("Saved {} records to {}".format(len(records), path))
 
 
-def build_indices(records):
-    """从记录构建城市/辖区索引。返回 (city_order, city_district_list)。"""
-    city_districts = defaultdict(set)
-    city_counts = Counter()
-    for a in records:
-        city = a.get("c", "")
-        district = a.get("d", "")
-        if city:
-            city_counts[city] += 1
-        if district:
-            city_districts[city].add(district)
-
-    city_order = [city for city, _ in city_counts.most_common()]
-
-    city_district_list = {}
-    for city in city_order:
-        dist_counter = Counter()
-        for a in records:
-            if a.get("c") == city:
-                dist_counter[a.get("d", "")] += 1
-        city_district_list[city] = [(d, c) for d, c in dist_counter.most_common()]
-
-    return city_order, city_district_list
-
-
-def build_html(records, template_path=None):
-    """从记录 + 模板构建完整 HTML。返回字符串。"""
-    template_path = template_path or TEMPLATE_FILE
-    if not os.path.exists(template_path):
-        raise FileNotFoundError("模板文件不存在: " + template_path)
-
-    with open(template_path, "r", encoding="utf-8") as f:
-        template = f.read()
-
-    city_order, city_district_list = build_indices(records)
-
-    data_json = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
-    city_dist_json = json.dumps(city_district_list, ensure_ascii=False, separators=(",", ":"))
-    city_order_json = json.dumps(city_order, ensure_ascii=False)
-
-    html = template.replace("__DATA_PLACEHOLDER__", data_json)
-    html = html.replace("__CITY_DIST_PLACEHOLDER__", city_dist_json)
-    html = html.replace("__CITY_ORDER_PLACEHOLDER__", city_order_json)
-
-    return html
-
-
-def validate_html(html):
-    """快速校验 HTML 结构完整性。返回 (ok, issues)。"""
+def validate_data(records):
+    """快速校验数据完整性。返回 (ok, issues)。"""
     issues = []
 
-    # 1. 关键 var 声明
-    for pat, label in [
-        (r"var ALL_DATA = \[", "ALL_DATA"),
-        (r"var CITY_DISTRICTS = \{", "CITY_DISTRICTS"),
-        (r"var CITY_ORDER = \[", "CITY_ORDER"),
-    ]:
-        if not re.search(pat, html):
-            issues.append("缺少: " + label)
+    # 必需字段
+    required = ["c", "d", "sc", "p", "st", "pr"]
+    for i, r in enumerate(records[:5]):
+        for f in required:
+            if f not in r:
+                issues.append("记录 {} 缺少字段 {}".format(i, f))
 
-    # 2. 关键函数
-    for fn in ["toggleFav", "init", "applyFilters", "renderTable", "exportCSV"]:
-        if html.count("function " + fn + "(") != 1:
-            issues.append("函数 {} 出现 {} 次".format(fn, html.count("function " + fn + "(")))
+    # 记录数合理性
+    if len(records) < 10000:
+        issues.append("记录数异常少: {}".format(len(records)))
+    if len(records) > 100000:
+        issues.append("记录数异常多: {}".format(len(records)))
 
-    # 3. 闭合标签
-    if html.count("</script>") != 1:
-        issues.append("</script> 出现 {} 次".format(html.count("</script>")))
-    if not html.strip().endswith("</html>"):
-        issues.append("未以 </html> 结尾")
+    # 城市数
+    cities = set(r.get("c", "") for r in records if r.get("c"))
+    if len(cities) < 10:
+        issues.append("城市数异常少: {}".format(len(cities)))
 
-    # 4. 结构括号平衡（只检查 {} 和 []，不检查 () 因为数据字段中含半角括号）
-    js = html[html.find("<script>") : html.find("</script>")]
-    braces_ok = js.count("{") == js.count("}")
-    brackets_ok = js.count("[") == js.count("]")
-    if not braces_ok:
-        issues.append("花括号不平衡 (diff={})".format(js.count("{") - js.count("}")))
-    if not brackets_ok:
-        issues.append("方括号不平衡 (diff={})".format(js.count("[") - js.count("]")))
+    # PR>0 的比例
+    pr_positive = sum(1 for r in records if r.get("pr") and r["pr"] > 0)
+    if pr_positive < len(records) * 0.5:
+        issues.append("PR>0 的记录不足一半: {} / {}".format(pr_positive, len(records)))
 
     return len(issues) == 0, issues
+
+
+def build_stats(records):
+    """生成统计摘要。"""
+    total_positions = sum(r.get("pr", 0) or 0 for r in records)
+    cities = len(set(r.get("c", "") for r in records if r.get("c")))
+    districts = len(set((r.get("c", ""), r.get("d", "")) for r in records if r.get("d")))
+    with_ms = sum(1 for r in records if r.get("ms") and r["ms"] > 0)
+    with_ts = sum(1 for r in records if r.get("ts") and r["ts"] > 0)
+    with_wc = sum(1 for r in records if r.get("wc") and r["wc"] > 0)
+    with_ic = sum(1 for r in records if r.get("ic") and r["ic"] > 0)
+
+    return {
+        "records": len(records),
+        "cities": cities,
+        "districts": districts,
+        "total_positions": total_positions,
+        "ms_positive": with_ms,
+        "ts_positive": with_ts,
+        "wc_positive": with_wc,
+        "ic_positive": with_ic,
+    }
 
 
 def main():
     check_only = "--check" in sys.argv
 
     print("Loading records...")
-    records = load_records()
+    records = load_records(DATA_FILE)
     print("  {} records".format(len(records)))
 
-    print("Building HTML...")
-    html = build_html(records)
-
-    print("Validating...")
-    ok, issues = validate_html(html)
-    if issues:
-        for issue in issues:
-            print("  ISSUE: " + issue)
-    print("  Validation: " + ("PASS" if ok else "FAIL"))
+    print("Validating data...")
+    ok, issues = validate_data(records)
+    for issue in issues:
+        print("  ISSUE: " + issue)
+    print("  Data validation: " + ("PASS" if ok else "FAIL"))
 
     if check_only:
-        print("\nCheck-only mode, no output written.")
+        stats = build_stats(records)
+        print("\n=== 数据统计 ===")
+        for k, v in stats.items():
+            print("  {}: {}".format(k, v))
         return 0 if ok else 1
 
-    # 提取数据统计
-    total_positions = sum(r.get("pr", 0) or 0 for r in records)
-    cities = len(set(r.get("c", "") for r in records if r.get("c")))
-    districts = len(set((r.get("c", ""), r.get("d", "")) for r in records if r.get("d")))
-    with_ms = sum(1 for r in records if r.get("ms") and r["ms"] > 0)
-    with_ts = sum(1 for r in records if r.get("ts") and r["ts"] > 0)
+    # 1. 写入 dist/viewer_data.json
+    print("\nWriting dist/viewer_data.json...")
+    os.makedirs(os.path.dirname(DIST_DATA), exist_ok=True)
+    save_records(records, DIST_DATA)
+    data_size = os.path.getsize(DIST_DATA)
+    print("  Size: {:,} bytes ({:.0f} MB)".format(data_size, data_size / 1024 / 1024))
 
-    os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        f.write(html)
+    # 2. 从模板生成 HTML（无嵌入数据，仅框架）
+    print("Generating HTML from template...")
+    with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
+        template = f.read()
 
-    file_size = os.path.getsize(OUTPUT_FILE)
-    print("\n=== 输出 ===")
-    print("文件: " + OUTPUT_FILE)
-    print("大小: {:,} bytes ({:.0f} KB)".format(file_size, file_size / 1024))
-    print("记录: {:,} 条".format(len(records)))
-    print("城市: {} 个".format(cities))
-    print("辖区: {} 个".format(districts))
-    print("拟聘总人数: {:,}".format(total_positions))
-    print("MS>0: {:,}".format(with_ms))
-    print("TS>0: {:,}".format(with_ts))
+    # 检查模板没有残留的 placeholders
+    for ph in ["__DATA_PLACEHOLDER__", "__CITY_DIST_PLACEHOLDER__", "__CITY_ORDER_PLACEHOLDER__"]:
+        if ph in template:
+            print("  ERROR: Template contains stale placeholder: " + ph)
+            return 1
+
+    # 输出到 dist/
+    os.makedirs(os.path.dirname(DIST_VIEWER), exist_ok=True)
+    with open(DIST_VIEWER, "w", encoding="utf-8") as f:
+        f.write(template)
+    print("  dist/guangdong_scores_viewer.html: {:,} bytes".format(os.path.getsize(DIST_VIEWER)))
+
+    # 输出到根目录 index.html
+    with open(ROOT_VIEWER, "w", encoding="utf-8") as f:
+        f.write(template)
+    print("  index.html: {:,} bytes".format(os.path.getsize(ROOT_VIEWER)))
+
+    # 3. 统计摘要
+    stats = build_stats(records)
+    print("\n=== 构建完成 ===")
+    print("记录: {records:,} 条".format(**stats))
+    print("城市: {cities} 个 · 辖区: {districts} 个".format(**stats))
+    print("拟聘总人数: {total_positions:,}".format(**stats))
+    print("MS>0: {ms_positive:,} · TS>0: {ts_positive:,}".format(**stats))
+    print("WC>0: {wc_positive:,} · IC>0: {ic_positive:,}".format(**stats))
     print("Done!")
 
     return 0
