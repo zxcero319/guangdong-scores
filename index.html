@@ -1522,10 +1522,28 @@ function showLoading(msg) {
 }
 
 function loadData() {
-  // Use embedded data directly (CDN is static snapshot, embedded has latest active records)
-  document.getElementById('tableInfo').textContent = '加载完成，共 ' + ALL_DATA.length.toLocaleString() + ' 条记录';
-  buildIndices();
-  init();
+  showLoading('正在从 CDN 加载数据...');
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', DATA_URL, true);
+  xhr.timeout = 30000;
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try {
+        var data = JSON.parse(xhr.responseText);
+        if (Array.isArray(data) && data.length > 0) {
+          ALL_DATA = data;
+          document.getElementById('tableInfo').textContent = '加载完成，共 ' + data.length.toLocaleString() + ' 条记录';
+          buildIndices();
+          init();
+          return;
+        }
+      } catch(e) { console.error(e); }
+    }
+    showError();
+  };
+  xhr.onerror = showError;
+  xhr.ontimeout = showError;
+  xhr.send();
 }
 
 function showError() {
