@@ -554,17 +554,14 @@ tr.expand-detail-row td{padding:8px 16px 12px;background:#fafbfc;border-bottom:2
 .filter-btn-batch.active{background:#1a73e8;color:#fff;}
 .filter-btn-batch.prev-active{background:#e65100;color:#fff;border-color:#e65100;}
 .filter-btn-batch.hist-active{background:#2e7d32;color:#fff;border-color:#2e7d32;}
-.filter-btn-batch.recruit-default{color:#d32f2f;border-color:#d32f2f;}
-.filter-btn-batch.recruit-active{background:#d32f2f;color:#fff;border-color:#d32f2f;}.filter-btn-batch.recruit-default{color:#d32f2f;border-color:#d32f2f;}
-.filter-btn-batch.recruit-active{background:#d32f2f;color:#fff;border-color:#d32f2f;}
-
+.filter-btn-batch.recruit-default{color:#d32f2f;border-color:#d32f2f;}.filter-btn-batch.recruit-active{background:#d32f2f;color:#fff;border-color:#d32f2f;}
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>广东教师招聘考试岗位竞争分析</h1>
-  <div class="sub">数据截止 2026-07-17 · 按学校+岗位聚合</div>
+  <div class="sub">数据截止 2026-07-22 · 按学校+岗位聚合</div>
 </div>
 
 <div class="container">
@@ -642,7 +639,27 @@ tr.expand-detail-row td{padding:8px 16px 12px;background:#fafbfc;border-bottom:2
     <div class="table-scroll-top" id="topScroll"><div></div></div>
     <div class="table-scroll" id="tableScroll">
       <table>
-        <thead><tr id="theadRow"></tr></thead>
+        <thead>
+          <tr id="theadRow">
+            <th style="width:36px;text-align:center" title="点击切换全部收藏">⭐</th>
+            <th data-sort="c" onclick="setSort('c')">城市 <span class="sort-icon"></span></th>
+            <th data-sort="d" onclick="setSort('d')">辖区 <span class="sort-icon"></span></th>
+            <th data-sort="sc" onclick="setSort('sc')">学校 <span class="sort-icon"></span></th>
+            <th data-sort="p" onclick="setSort('p')">岗位 <span class="sort-icon"></span></th>
+            <th data-sort="st" onclick="setSort('st')">学段 <span class="sort-icon"></span></th>
+            <th data-sort="yr" onclick="setSort('yr')">年份 <span class="sort-icon"></span></th>
+            <th data-sort="edu" onclick="setSort('edu')">学历要求 <span class="sort-icon"></span></th>
+            <th data-sort="rs" onclick="setSort('rs')">招聘范围 <span class="sort-icon"></span></th>
+            <th data-sort="pr" onclick="setSort('pr')" title="该岗位最终拟聘人数（通过体检人数）">计划招聘 <span class="sort-icon"></span></th>
+            <th data-sort="ms" onclick="setSort('ms')" title="进入面试考生的最低笔试成绩">最低进面分 <span class="sort-icon"></span></th>
+            <th data-sort="ts" onclick="setSort('ts')" title="笔试×40%+面试×60%的加权总分最低值">最低综合分 <span class="sort-icon"></span></th>
+            <th data-sort="wc" onclick="setSort('wc')" title="参加笔试的考生人数">笔试人数 <span class="sort-icon"></span></th>
+            <th data-sort="ic" onclick="setSort('ic')" title="参加面试的考生人数">面试人数 <span class="sort-icon"></span></th>
+            <th data-sort="wr" onclick="setSort('wr')" title="笔试人数 ÷ 计划招聘人数">笔试竞争比 <span class="sort-icon"></span></th>
+            <th data-sort="ir" onclick="setSort('ir')" title="面试人数 ÷ 计划招聘人数">面试竞争比 <span class="sort-icon"></span></th>
+            <th data-sort="b" onclick="setSort('b')" style="display:none">批次 <span class="sort-icon"></span></th>
+          </tr>
+        </thead>
         <tbody id="tableBody"></tbody>
       </table>
     </div>
@@ -817,7 +834,7 @@ function applyFilters() {
     if (posF && (!r.su || r.su.toLowerCase().indexOf(posF) === -1)) return false;
     if (currentBatchFilter && r._batch !== currentBatchFilter) return false;
     if (search) {
-      var haystack = (r.sc + ' ' + r.p + ' ' + r.st + ' ' + r.edu + ' ' + (r.rs||'') + ' ' + r.yr + ' ' + r.b).toLowerCase();
+      var haystack = (r.sc + ' ' + r.p + ' ' + r.st + ' ' + r.edu + ' ' + (r.rs||'') + ' ' + r.yr + ' ' + (r._exam_content||'') + ' ' + (r._reg_label||'') + ' ' + r.b).toLowerCase();
       if (haystack.indexOf(search) === -1) return false;
     }
     return true;
@@ -826,7 +843,6 @@ function applyFilters() {
   currentPage = 1;
   updateStats();
   if (sortKey) sortData();
-  updateTheadForBatch();
   renderTable();
 }
 
@@ -1185,8 +1201,8 @@ function renderTable() {
         '<td class="num-cell">' + formatPR(r) + '</td>' +
         '<td class="num-cell">' + formatScore(r.ms) + '</td>' +
         '<td class="num-cell">' + formatScore(r.ts) + '</td>' +
-        '<td class="num-cell">' + (r._wc_shared ? '<span class="wc-shared" title="' + (r._wc_shared_info||'') + '">' + (r.wc||0) + '</span>' : formatCount(r.wc)) + '</td>' +
-        '<td class="num-cell">' + (r._ic_shared ? '<span class="ic-shared" title="' + (r._ic_shared_info||'') + '">' + (r.ic||0) + '</span>' : formatCount(r.ic)) + '</td>' +
+        '<td class="num-cell">' + (r._wc_shared ? '<span class="wc-shared" title="' + (r._wc_shared_info||'') + '">' + (r.wc > 0 ? r.wc : '—') + '</span>' : formatCount(r.wc)) + '</td>' +
+        '<td class="num-cell">' + (r._ic_shared ? '<span class="ic-shared" title="' + (r._ic_shared_info||'') + '">' + (r.ic > 0 ? r.ic : '—') + '</span>' : formatCount(r.ic)) + '</td>' +
         '<td>' + formatRatio(r.wr) + '</td>' +
         '<td>' + formatRatio(r.ir) + '</td>' +
         '<td title="' + (r.b||'') + '" style="display:none">' + (r.b || '-') + '</td>' +
@@ -1330,7 +1346,7 @@ function toggleExpandRow(el) {
     {l:"专业要求",v:el.getAttribute("data-major")||""},
     {l:"教师资格证",v:el.getAttribute("data-title")||""},
     {l:"其他要求/备注",v:el.getAttribute("data-other")||""},
-    {l:"数据来源",v:el.getAttribute("data-source-url")||""},
+    {l:"考试内容",v:el.getAttribute("data-exam")||""},{l:"数据来源",v:el.getAttribute("data-source-url")||"",link:true},
       {l:"岗位代码",v:el.getAttribute("data-pc")||""}
   ];
   var btns = "";
@@ -1341,7 +1357,7 @@ function toggleExpandRow(el) {
     hasAny = true;
     var fid = "fld_"+Math.random().toString(36).substr(2,8);
     btns += '<span class="expand-field-btn active">'+f.l+'</span>';
-    btns += '<div class="expand-field-content show" id="'+fid+'">'+escapeHtml(f.v)+'</div>';
+    var dispVal = f.link && f.v ? '<a href="'+f.v+'" target="_blank" style="color:#667eea">'+escapeHtml(f.v)+'</a>' : escapeHtml(f.v); btns += '<div class="expand-field-content show" id="'+fid+'">'+dispVal+'</div>';
   }
   if (!hasAny) { el.classList.remove("expanded"); return; }
   var cols = el.getElementsByTagName("td").length;
@@ -1358,7 +1374,11 @@ function toggleField(fid, btn) {
   // No-op: all fields are visible by default in the new UI
 }
 
-
+function escapeHtml(t) {
+  var d = document.createElement("div");
+  d.textContent = t;
+  return d.innerHTML;
+}
 
 var THEAD_NORMAL = `<th style="width:36px;text-align:center" title="点击切换全部收藏">⭐</th>
             <th data-sort="c" onclick="setSort('c')">城市 <span class="sort-icon"></span></th>
@@ -1376,7 +1396,7 @@ var THEAD_NORMAL = `<th style="width:36px;text-align:center" title="点击切换
             <th data-sort="ic" onclick="setSort('ic')" title="参加面试的考生人数">面试人数 <span class="sort-icon"></span></th>
             <th data-sort="wr" onclick="setSort('wr')" title="笔试人数 ÷ 计划招聘人数">笔试竞争比 <span class="sort-icon"></span></th>
             <th data-sort="ir" onclick="setSort('ir')" title="面试人数 ÷ 计划招聘人数">面试竞争比 <span class="sort-icon"></span></th>
-            <th data-sort="b" onclick="setSort('b')" style="display:none">批次 <span class="sort-icon"></span></th>`
+            <th data-sort="b" onclick="setSort('b')" style="display:none">批次 <span class="sort-icon"></span></th>`;
 var THEAD_ACTIVE = `<th style="width:36px;text-align:center" title="点击切换全部收藏">⭐</th>
             <th data-sort="c" onclick="setSort('c')">城市 <span class="sort-icon"></span></th>
             <th data-sort="d" onclick="setSort('d')">辖区 <span class="sort-icon"></span></th>
@@ -1391,7 +1411,7 @@ var THEAD_ACTIVE = `<th style="width:36px;text-align:center" title="点击切换
             <th data-sort="_reg_end" onclick="setSort('_reg_end')" title="报名截止日期">报名截止 <span class="sort-icon"></span></th>
             <th data-sort="_exam_content" onclick="setSort('_exam_content')" title="笔试科目/考试内容">考试内容 <span class="sort-icon"></span></th>
             <th data-sort="_reg_url" onclick="setSort('_reg_url')" title="招聘公告链接">报名链接 <span class="sort-icon"></span></th>
-            <th data-sort="b" onclick="setSort('b')" style="display:none">批次 <span class="sort-icon"></span></th>`
+            <th data-sort="b" onclick="setSort('b')" style="display:none">批次 <span class="sort-icon"></span></th>`;
 
 function updateTheadForBatch() {
   var tr = document.getElementById('theadRow');
@@ -1401,13 +1421,6 @@ function updateTheadForBatch() {
   } else {
     tr.innerHTML = THEAD_NORMAL;
   }
-}
-
-
-function escapeHtml(t) {
-  var d = document.createElement("div");
-  d.textContent = t;
-  return d.innerHTML;
 }
 
 function filterBatch(batch) {
@@ -1471,7 +1484,7 @@ renderTable = function() {
         if (tds.length >= 5) {
           var badge = document.createElement("span");
           badge.className = "batch-badge " + batch;
-          badge.textContent = batch === "current" ? "本次" : (batch === "previous" ? "上次" : "往年");
+          badge.textContent = batch === "current" ? "本次" : (batch === "previous" ? "上次" : "报名");
           tds[4].appendChild(badge);
         }
       }
@@ -1482,7 +1495,7 @@ renderTable = function() {
 
 
 // ===== DATA LOADING FROM CDN =====
-var DATA_URL = "https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@fb50f97/dist/viewer_data.json";
+var DATA_URL = "https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json";
 
 function buildIndices() {
   var cityDistricts = {};
@@ -1509,27 +1522,24 @@ function showLoading(msg) {
 }
 
 function loadData() {
-  showLoading('正在从 CDN 加载数据...');
+  // Async load from separate JSON file (avoids Safari JS heap crash with 12MB inline data)
+  showLoading('正在加载数据...');
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', DATA_URL, true);
-  xhr.timeout = 30000;
+  xhr.open('GET', 'https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json', true);
+  xhr.responseType = 'json';
   xhr.onload = function() {
-    if (xhr.status === 200) {
-      try {
-        var data = JSON.parse(xhr.responseText);
-        if (Array.isArray(data) && data.length > 0) {
-          ALL_DATA = data;
-          document.getElementById('tableInfo').textContent = '加载完成，共 ' + data.length.toLocaleString() + ' 条记录';
-          buildIndices();
-          init();
-          return;
-        }
-      } catch(e) { console.error(e); }
+    if (xhr.status === 200 && Array.isArray(xhr.response)) {
+      ALL_DATA = xhr.response;
+      document.getElementById('tableInfo').textContent = '加载完成，共 ' + ALL_DATA.length.toLocaleString() + ' 条记录';
+      buildIndices();
+      init();
+    } else {
+      showError();
     }
-    showError();
   };
-  xhr.onerror = showError;
-  xhr.ontimeout = showError;
+  xhr.onerror = function() { showError(); };
+  xhr.ontimeout = function() { showError(); };
+  xhr.timeout = 60000;
   xhr.send();
 }
 
@@ -1537,7 +1547,7 @@ function showError() {
   var tb = document.getElementById('tableBody');
   if (tb) tb.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:60px;color:#d93025;">'
     + '<div style="font-size:48px;margin-bottom:16px;">&#9888;</div>'
-    + '<div style="font-size:16px;">数据加载失败，请检查网络连接后刷新页面</div>'
+    + '<div style="font-size:16px;">数据加载失败，请确认 viewer_data.json 与 HTML 在同一目录下，然后刷新页面</div>'
     + '<div style="font-size:13px;margin-top:8px;color:#5f6368;">数据源: <a href="' + DATA_URL + '" target="_blank">' + DATA_URL + '</a></div>'
     + '</td></tr>';
 }
