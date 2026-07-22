@@ -1495,7 +1495,7 @@ renderTable = function() {
 
 
 // ===== DATA LOADING FROM CDN =====
-var DATA_URL = "https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json";
+var DATA_URL = "dist/viewer_data.json";
 
 function buildIndices() {
   var cityDistricts = {};
@@ -1525,7 +1525,7 @@ function loadData() {
   // Async load from separate JSON file (avoids Safari JS heap crash with 12MB inline data)
   showLoading('正在加载数据...');
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', 'https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json', true);
+  xhr.open('GET', 'dist/viewer_data.json', true);
   xhr.responseType = 'json';
   xhr.onload = function() {
     if (xhr.status === 200 && Array.isArray(xhr.response)) {
