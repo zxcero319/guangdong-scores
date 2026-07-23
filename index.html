@@ -1495,7 +1495,35 @@ renderTable = function() {
 
 
 // ===== DATA LOADING FROM CDN =====
-var DATA_URL = "dist/viewer_data.json";
+var DATA_VERSION = '2026-07-23-v1';
+var DATA_URLS = [
+  'dist/viewer_data.json',
+  'https://raw.githubusercontent.com/zxcero319/guangdong-scores/master/dist/viewer_data.json',
+  'https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json'
+];
+
+function loadFromCache() {
+  try {
+    var cached = localStorage.getItem('gs_data');
+    var ver = localStorage.getItem('gs_data_ver');
+    if (cached && ver === DATA_VERSION) {
+      var data = JSON.parse(cached);
+      if (Array.isArray(data) && data.length > 1000) return data;
+    }
+    if (cached && ver !== DATA_VERSION) {
+      localStorage.removeItem('gs_data');
+      localStorage.removeItem('gs_data_ver');
+    }
+  } catch(e) {}
+  return null;
+}
+
+function saveToCache(data) {
+  try {
+    localStorage.setItem('gs_data', JSON.stringify(data));
+    localStorage.setItem('gs_data_ver', DATA_VERSION);
+  } catch(e) {}
+}
 
 function buildIndices() {
   var cityDistricts = {};
@@ -1522,33 +1550,57 @@ function showLoading(msg) {
 }
 
 function loadData() {
-  // Async load from separate JSON file (avoids Safari JS heap crash with 12MB inline data)
-  showLoading('正在加载数据...');
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', 'dist/viewer_data.json', true);
-  xhr.responseType = 'json';
-  xhr.onload = function() {
-    if (xhr.status === 200 && Array.isArray(xhr.response)) {
-      ALL_DATA = xhr.response;
-      document.getElementById('tableInfo').textContent = '加载完成，共 ' + ALL_DATA.length.toLocaleString() + ' 条记录';
-      buildIndices();
-      init();
-    } else {
+  // 1. Try localStorage cache first (instant)
+  var cached = loadFromCache();
+  if (cached) {
+    ALL_DATA = cached;
+    document.getElementById('tableInfo').textContent = '加载完成（缓存），共 ' + ALL_DATA.length.toLocaleString() + ' 条记录';
+    buildIndices();
+    init();
+    return;
+  }
+
+  // 2. Try URLs in sequence with fallback
+  var urlIdx = 0;
+  var PER_URL_TIMEOUT = 8000;
+
+  function tryNext() {
+    if (urlIdx >= DATA_URLS.length) {
       showError();
+      return;
     }
-  };
-  xhr.onerror = function() { showError(); };
-  xhr.ontimeout = function() { showError(); };
-  xhr.timeout = 60000;
-  xhr.send();
+    var url = DATA_URLS[urlIdx];
+    showLoading('正在加载数据 (' + (urlIdx+1) + '/' + DATA_URLS.length + ')...');
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'json';
+    var done = false;
+    xhr.onload = function() {
+      if (done) return; done = true;
+      if (xhr.status === 200 && Array.isArray(xhr.response)) {
+        ALL_DATA = xhr.response;
+        saveToCache(ALL_DATA);
+        document.getElementById('tableInfo').textContent = '加载完成，共 ' + ALL_DATA.length.toLocaleString() + ' 条记录';
+        buildIndices();
+        init();
+      } else {
+        urlIdx++; tryNext();
+      }
+    };
+    xhr.onerror = function() { if (!done) { done = true; urlIdx++; tryNext(); } };
+    xhr.ontimeout = function() { if (!done) { done = true; urlIdx++; tryNext(); } };
+    xhr.timeout = PER_URL_TIMEOUT;
+    xhr.send();
+  }
+  tryNext();
 }
 
 function showError() {
   var tb = document.getElementById('tableBody');
   if (tb) tb.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:60px;color:#d93025;">'
     + '<div style="font-size:48px;margin-bottom:16px;">&#9888;</div>'
-    + '<div style="font-size:16px;">数据加载失败，请确认 viewer_data.json 与 HTML 在同一目录下，然后刷新页面</div>'
-    + '<div style="font-size:13px;margin-top:8px;color:#5f6368;">数据源: <a href="' + DATA_URL + '" target="_blank">' + DATA_URL + '</a></div>'
+    + '<div style="font-size:16px;">数据加载失败，请检查网络连接后<a href="javascript:location.reload()" style="color:#2563eb;text-decoration:underline;">刷新页面</a>重试</div>'
+    + '<div style="font-size:12px;margin-top:10px;color:#9ca3af;">已尝试 ' + DATA_URLS.length + ' 个数据源均失败</div>'
     + '</td></tr>';
 }
 
