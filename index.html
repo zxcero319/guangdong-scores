@@ -1498,6 +1498,7 @@ renderTable = function() {
 var DATA_VERSION = '2026-07-23-v1';
 var DATA_URLS = [
   'dist/viewer_data.json',
+  'https://guangdong-scores.pages.dev/dist/viewer_data.json',
   'https://raw.githubusercontent.com/zxcero319/guangdong-scores/master/dist/viewer_data.json',
   'https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/viewer_data.json'
 ];
@@ -1562,7 +1563,7 @@ function loadData() {
 
   // 2. Try URLs in sequence with fallback
   var urlIdx = 0;
-  var PER_URL_TIMEOUT = 8000;
+  var PER_URL_TIMEOUT = 20000;
 
   function tryNext() {
     if (urlIdx >= DATA_URLS.length) {
