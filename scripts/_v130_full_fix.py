@@ -60,12 +60,25 @@ def tag_current(r):
 def apply_code_updates(data, by_code, updates, label):
     """Apply WC/MS/TS/IC/PR updates to viewer records by position_code"""
     applied = 0
+    wc_eq_ic_warns = 0
     for code, upd in updates.items():
         code = str(code).strip()
         if code not in by_code: continue
         for idx in by_code[code]:
             r = data[idx]
             changed = False
+
+            # ═══ WC==IC PERMANENT GUARD ═══
+            # Check if applying this update would result in WC==IC
+            new_wc = upd.get('wc', 0) if upd.get('wc', 0) > 0 else r.get('wc', 0)
+            new_ic = upd.get('ic', 0) if upd.get('ic', 0) > 0 else r.get('ic', 0)
+            if new_wc > 0 and new_wc == new_ic:
+                # Only warn if both WC and IC are being set from this update
+                if upd.get('wc', 0) > 0 and upd.get('ic', 0) > 0:
+                    if wc_eq_ic_warns < 3:
+                        print(f'  [{label}] WC==IC GUARD: code={code} wc=ic={new_wc} '
+                              f'| 确认来源为完整笔试名单(含面试缺考行)? 综合成绩表可WC==IC.')
+                    wc_eq_ic_warns += 1
 
             if upd.get('wc', 0) > 0 and r.get('wc', 0) == 0:
                 r['wc'] = upd['wc']; stats['wc'] += 1; changed = True
@@ -92,6 +105,8 @@ def apply_code_updates(data, by_code, updates, label):
             if r.get('ic', 0) > 0 and r.get('pr', 0) > 0:
                 r['ir'] = round(r['ic'] / r['pr'], 2)
 
+    if wc_eq_ic_warns > 0:
+        print(f'  [{label}] WC==IC guard: {wc_eq_ic_warns} codes where WC==IC')
     print(f'  [{label}] {applied} record updates from {len(updates)} codes')
     return applied
 
