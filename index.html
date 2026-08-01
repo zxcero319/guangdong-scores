@@ -617,6 +617,13 @@ tr.expand-detail-row td{padding:8px 16px 12px;background:#fafbfc;border-bottom:2
           <option value="不限">不限</option>
         </select>
       </div>
+      <div class="filter-group" style="max-width:210px;min-width:210px;">
+        <label>招聘渠道</label>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button id="btnChannelNormal" class="filter-btn-batch active" onclick="toggleChannel(this,'普通招聘')" style="margin-left:0;">普通招聘</button>
+          <button id="btnChannelCampus" class="filter-btn-batch active" onclick="toggleChannel(this,'赴高校')" style="margin-left:0;">赴高校(校园专场)</button>
+        </div>
+      </div>
       <div class="filter-group" style="max-width:180px;">
         <label>岗位搜索</label>
         <div id="posSearchWrap">
@@ -696,6 +703,7 @@ var pageSize = 30;
 var sortKey = null;
 var sortAsc = true;
 var selectedDistricts = {};
+var selectedChannels = new Set();
 
 // ===== INIT =====
 function init() {
@@ -813,6 +821,17 @@ function clearDistricts() {
   applyFilters();
 }
 
+function toggleChannel(btn, channel) {
+  if (selectedChannels.has(channel)) {
+    selectedChannels.delete(channel);
+    btn.classList.remove('active');
+  } else {
+    selectedChannels.add(channel);
+    btn.classList.add('active');
+  }
+  applyFilters();
+}
+
 // ===== FILTERS =====
 function applyFilters() {
   var city = document.getElementById('citySelect').value;
@@ -831,10 +850,11 @@ function applyFilters() {
     if (stageF && r.st !== stageF) return false;
     if (eduF && r.edu !== eduF) return false;
     if (scopeF && r.rs !== scopeF) return false;
+    if (selectedChannels.size > 0 && selectedChannels.size < 2 && !selectedChannels.has(r._channel || '普通招聘')) return false;
     if (posF && (!r.su || r.su.toLowerCase().indexOf(posF) === -1)) return false;
     if (currentBatchFilter && r._batch !== currentBatchFilter) return false;
     if (search) {
-      var haystack = (r.sc + ' ' + r.p + ' ' + r.st + ' ' + r.edu + ' ' + (r.rs||'') + ' ' + r.yr + ' ' + (r._exam_content||'') + ' ' + (r._reg_label||'') + ' ' + r.b).toLowerCase();
+      var haystack = (r.sc + ' ' + r.p + ' ' + r.st + ' ' + r.edu + ' ' + (r.rs||'') + ' ' + r.yr + ' ' + (r._exam_content||'') + ' ' + (r._reg_label||'') + ' ' + (r._channel||'') + ' ' + r.b).toLowerCase();
       if (haystack.indexOf(search) === -1) return false;
     }
     return true;
