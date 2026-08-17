@@ -2089,18 +2089,57 @@ function updateBatchButtonCounts() {
 }
 
 function loadCityData(city) {
-  // Load a city's data on demand. Returns a Promise.
+  // Load a city data on demand from multiple CDN sources (timeout + fallback).
+  // Returns a Promise. Tries github.io -> pages.dev -> raw GitHub -> jsdelivr.
   if (LOADED_CITIES[city]) return Promise.resolve();
   if (ALL_CITIES_LOADED) return Promise.resolve();
 
   // Deduplicate concurrent loads
   if (CITY_LOADING && CITY_LOADING._city === city) return CITY_LOADING;
 
-  var promise = fetch('dist/city/' + encodeURIComponent(city) + '.json')
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
+  var encoded = encodeURIComponent(city);
+  var urls = [
+    'dist/city/' + encoded + '.json',
+    'https://guangdong-scores.pages.dev/dist/city/' + encoded + '.json',
+    'https://raw.githubusercontent.com/zxcero319/guangdong-scores/master/dist/city/' + encoded + '.json',
+    'https://cdn.jsdelivr.net/gh/zxcero319/guangdong-scores@master/dist/city/' + encoded + '.json'
+  ];
+  var PER_URL_TIMEOUT = 15000;
+
+  function attempt(idx) {
+    if (idx >= urls.length) return Promise.reject(new Error('all sources failed'));
+    var container = document.getElementById('districtList');
+    if (container) container.innerHTML = '<span style="color:#1a73e8;font-size:13px;">⏳ 正在加载' + city + '数据 (' + (idx + 1) + '/' + urls.length + ')...</span>';
+
+    return new Promise(function(resolve) {
+      var settled = false;
+      var timer = setTimeout(function() {
+        if (!settled) { settled = true; resolve(attempt(idx + 1)); }
+      }, PER_URL_TIMEOUT);
+
+      fetch(urls[idx])
+        .then(function(r) {
+          if (settled) return null;
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(cityData) {
+          if (settled) return;
+          clearTimeout(timer);
+          settled = true;
+          if (!Array.isArray(cityData)) { resolve(attempt(idx + 1)); return; }
+          resolve(cityData);
+        })
+        .catch(function() {
+          if (settled) return;
+          clearTimeout(timer);
+          settled = true;
+          resolve(attempt(idx + 1));
+        });
+    });
+  }
+
+  var promise = attempt(0)
     .then(function(cityData) {
       if (!Array.isArray(cityData)) throw new Error('Invalid city data');
       ALL_CITY_DATA[city] = cityData;
