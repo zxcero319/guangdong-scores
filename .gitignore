@@ -17,10 +17,15 @@
 data/*
 !data/viewer_data.json
 
-# scripts/ 下只保留重建脚本和工具模块
+# scripts/ 下只保留重建脚本、工具模块和核心操作脚本
 scripts/*
 !scripts/_rebuild_viewer.py
 !scripts/_viewer_utils.py
+!scripts/_field_normalize.py
+!scripts/rotate_batch.py
+!scripts/ingest_drop.py
+!scripts/expire_active.py
+!scripts/_sync_gp.py
 
 # dist/ 下只保留 viewer HTML 和 data JSON
 dist/*
