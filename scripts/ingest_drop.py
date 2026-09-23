@@ -19,6 +19,10 @@
 import os, sys, re, json
 from collections import defaultdict, Counter
 sys.stdout.reconfigure(encoding='utf-8')
+sys.path.insert(0, 'scripts')
+from _field_normalize import normalize_record
+
+DRY = True  # 干跑时不打印每 code 的 [更新]/[不变]/[清空]（只看汇总+异常+无匹配）
 
 VIEWER = r'D:\claude_code\gaokao\jiaozi\guangdong_scores\dist\guangdong_scores_viewer.html'
 
@@ -94,10 +98,12 @@ def to_float(v):
 
 def read_xlsx(path):
     import openpyxl, xlrd
+    from io import BytesIO
     with open(path, 'rb') as fh:
-        magic = fh.read(8)
-    if magic.startswith(b'PK'):
-        wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+        data = fh.read()
+    if data[:8].startswith(b'PK'):
+        # 用 BytesIO 绕过 openpyxl 按扩展名拒读 .xls（云浮文件实为 xlsx 但后缀 .xls）
+        wb = openpyxl.load_workbook(BytesIO(data), data_only=True, read_only=True)
         rows = [[norm(c) for c in r] for ws in wb.worksheets for r in ws.iter_rows(values_only=True)]
         wb.close()
     else:
@@ -204,7 +210,7 @@ def infer_loc(title):
             return sc, sd, yr
     # 无区县 → 从标题找城市 + 市直
     city = next((c for c in CITIES if c in t), None)
-    if '市教育局直属' in t or '市直' in t:
+    if '市教育局直属' in t or '市教育局所属' in t or '市直' in t:
         district = '市直'
     elif '市直属' in t:
         district = '市直属'
@@ -218,7 +224,22 @@ def infer_loc(title):
 # ---------------- 文件分类 ----------------
 CODE_KEYS = ['岗位代码', '职位代码', '岗位编号', '岗位编码']
 SCHOOL_KEYS = ['招考单位', '招聘单位', '单位名称', '聘用单位', '拟聘用单位', '报考单位', '工作部门', '主管部门', '学校']
-POS_KEYS = ['岗位名称', '报考岗位', '报考岗位名称', '岗位名称']
+POS_KEYS = ['岗位名称', '报考岗位', '报考岗位名称', '招聘岗位', '招聘岗位名称']
+
+# ---------------- 岗位表（无姓名/成绩列，有岗位代码+计划数） ----------------
+PLAN_KEYS = ['招聘人数', '计划数', '拟招聘人数', '招聘计划', '岗位数', '拟聘人数', '招聘数', '计划招聘数', '招聘名额']
+JOB_EDU_KEYS = ['学历要求', '学历']
+JOB_DEGREE_KEYS = ['学位要求', '学位']
+JOB_MAJOR_KEYS = ['专业要求', '专业', '本科专业', '招聘专业']
+JOB_GRAD_MAJOR_KEYS = ['研究生专业', '研究生方向']
+JOB_UNDER_MAJOR_KEYS = ['本科专业']
+JOB_TITLE_KEYS = ['教师资格', '教师资格证', '教资', '教师资格要求']
+JOB_AGE_KEYS = ['年龄要求', '年龄']
+JOB_POLITICAL_KEYS = ['政治面貌']
+JOB_OTHER_KEYS = ['其他要求', '备注', '其他条件']
+JOB_RS_KEYS = ['考生类别', '招聘对象', '招聘范围', '报考类别', '招聘对象类别', '人员类别']
+JOB_STAGE_KEYS = ['学段', '岗位类别', '招聘学段', '学段要求']
+ST_MAP = {'幼儿园': '幼儿', '初中': '初中', '高中': '高中', '小学': '小学', '中职': '中职', '特殊教育': '特殊教育', '高校': '高校'}
 
 
 def classify(rows, fname):
@@ -249,6 +270,8 @@ def classify(rows, fname):
         typ = 'written'
     elif has_iv:
         typ = 'interview'
+    elif find_col(hdr, PLAN_KEYS) is not None and find_col(hdr, ['姓名', '准考证号', '身份证号']) is None:
+        typ = 'jobtable'  # 岗位表：有岗位代码+计划数，无姓名列、无成绩列
     else:
         return None
 
@@ -284,7 +307,10 @@ def extract_raw(rows):
     if hdr is None:
         return []
     code_col = find_col(hdr, CODE_KEYS)
-    school_col = find_col(hdr, SCHOOL_KEYS)
+    # 「择岗后拟聘用单位」优先于「报考单位」：拟聘公示里报考单位是合并校名，择岗后才是实际学校
+    school_col = find_col(hdr, ['择岗后拟聘用单位', '择岗后聘用单位'])
+    if school_col is None:
+        school_col = find_col(hdr, SCHOOL_KEYS)
     pos_col = find_col(hdr, POS_KEYS)
     if code_col is None and _school_col_is_code(rows, hi, school_col):
         code_col = school_col  # 化州拟聘名单'报考单位'列实存岗位代码
@@ -331,6 +357,216 @@ def extract_raw(rows):
     return raw
 
 
+# ---------------- 岗位表提取/回填/新增 ----------------
+def infer_su(p):
+    """从岗位名推断学科；幼儿园/特殊教育无学科 → ''"""
+    if not p or '幼儿园' in p or '特殊教育' in p:
+        return ''
+    m = re.sub(r'^(初中|高中|小学|中职|特殊教育)', '', p)
+    m = re.sub(r'教师$', '', m)
+    return m
+
+
+def infer_st(p, stage_col):
+    if stage_col:
+        return ST_MAP.get(stage_col, stage_col)
+    for k in ['高中', '初中', '小学', '幼儿', '中职', '特殊教育', '高校']:
+        if k in p:
+            return '幼儿' if k == '幼儿' else k
+    return ''
+
+
+def extract_jobtable(rows):
+    """从岗位表 rows 提取 code/school/pos/pr + 可展开字段（按表头名找列）。"""
+    hdr = None; hi = 0
+    for i, r in enumerate(rows):
+        cc = [(c or '').replace(' ', '').replace('\n', '') for c in r]
+        if any(k in c for c in cc for k in CODE_KEYS):
+            hdr = r; hi = i; break
+    if hdr is None:
+        return []
+
+    def col(keys): return find_col(hdr, keys)
+    code_col = col(CODE_KEYS)
+    school_col = col(SCHOOL_KEYS)
+    pos_col = col(POS_KEYS)
+    plan_col = col(PLAN_KEYS)
+    edu_col = col(JOB_EDU_KEYS)
+    degree_col = col(JOB_DEGREE_KEYS)
+    major_col = col(JOB_MAJOR_KEYS)
+    grad_col = col(JOB_GRAD_MAJOR_KEYS)
+    under_col = col(JOB_UNDER_MAJOR_KEYS)
+    # 「专业要求」合并表头跨两列（本科|研究生），第二列表头为空 → 拆为本科/研究生两列
+    if grad_col is None and under_col is None and major_col is not None and major_col + 1 < len(hdr):
+        if not norm(hdr[major_col + 1]):
+            under_col = major_col
+            grad_col = major_col + 1
+            major_col = None
+    title_col = col(JOB_TITLE_KEYS)
+    age_col = col(JOB_AGE_KEYS)
+    political_col = col(JOB_POLITICAL_KEYS)
+    other_col = col(JOB_OTHER_KEYS)
+    rs_col = col(JOB_RS_KEYS)
+    stage_col = col(JOB_STAGE_KEYS)
+
+    def cell(ci, r):
+        return norm(r[ci]) if (ci is not None and ci < len(r)) else ''
+
+    out = []
+    prev_code = prev_school = prev_pos = ''
+    for r in rows[hi + 1:]:
+        code = cell(code_col, r)
+        school = norm_school(cell(school_col, r))
+        pos = norm_pos(cell(pos_col, r))
+        # 多 sheet 拼合时第二个 sheet 的表头 → 重置继承并跳过
+        if code in HEADER_CODES or (not code and school in HEADER_SCHOOLS and pos in HEADER_POS):
+            prev_code = prev_school = prev_pos = ''
+            continue
+        if not code:
+            code = prev_code
+        if not school:
+            school = prev_school
+        if not pos:
+            pos = prev_pos
+        if not code:
+            continue
+        prev_code = code
+        prev_school = school
+        prev_pos = pos
+        plan = cell(plan_col, r)
+        try:
+            pr = int(float(plan)) if plan else 0
+        except ValueError:
+            pr = 0
+        out.append(dict(
+            code=code, school=school, pos=pos, pr=pr,
+            edu=cell(edu_col, r), degree=cell(degree_col, r),
+            major=cell(major_col, r), grad=cell(grad_col, r), under=cell(under_col, r),
+            title=cell(title_col, r), age=cell(age_col, r),
+            political=cell(political_col, r), other=cell(other_col, r),
+            rs=cell(rs_col, r), stage=cell(stage_col, r)))
+    return out
+
+
+def _clean(v):
+    """岗位表空值记号（/ 无 不限 — -）→ ''"""
+    v = (v or '').strip()
+    return '' if v in ('/', '无', '不限', '—', '-', '\\') else v
+
+
+def build_job_record(j, c, dist, yr, src_label, rid):
+    edu_raw = j['edu']
+    rs_raw = j['rs'] or '不限'
+    grad = _clean(j['grad']); under = _clean(j['under']); major = _clean(j['major'])
+    if grad and under:
+        major_req = '研究生：%s\n本科：%s' % (grad, under)
+    elif grad:
+        major_req = '研究生：%s' % grad
+    elif under:
+        major_req = '本科：%s' % under
+    elif major:
+        major_req = major
+    else:
+        major_req = ''
+    rec = dict(
+        c=c, d=dist, sc=j['school'], p=j['pos'], yr=yr,
+        st=infer_st(j['pos'], j['stage']), su=infer_su(j['pos']),
+        edu=edu_raw, rs=rs_raw,
+        b=src_label, ssl='',
+        wc=0, ic=0, pr=j['pr'], ms=None, ts=None, wr=None, ir=None,
+        position_code=j['code'], recruit_plan_source=src_label,
+        _edu_req=edu_raw, _degree_req=_clean(j['degree']), _major_req=major_req,
+        _title_req=_clean(j['title']), _age_req=_clean(j['age']),
+        _political=_clean(j['political']), _other_req=(_clean(j['other']) or '不限'),
+        _rid=rid,
+        _batch='current', _batch_label='本次更新',
+        _wc_ic_same_source=False, _source_url=src_label, _channel='普通招聘',
+    )
+    normalize_record(rec)  # 归一化 edu/rs 显示字段
+    return rec
+
+
+def _backfill_job(r, j):
+    """回填缺失的可展开字段（不覆盖已有值）。返回 changes dict。"""
+    changes = {}
+    tmp = {'edu': j['edu'] or '', 'rs': j['rs'] or ''}
+    normalize_record(tmp)  # 归一化后再回填
+    edu_norm, rs_norm = tmp['edu'], tmp['rs']
+    if j['pr'] and not r.get('pr'):
+        changes['pr'] = j['pr']
+    if edu_norm and not r.get('_edu_req'):
+        changes['_edu_req'] = edu_norm
+        if not r.get('edu'):
+            changes['edu'] = edu_norm
+    if j['degree'] and not r.get('_degree_req'):
+        changes['_degree_req'] = j['degree']
+    if not r.get('_major_req'):
+        grad = _clean(j['grad']); under = _clean(j['under']); major = _clean(j['major'])
+        if grad and under:
+            changes['_major_req'] = '研究生：%s\n本科：%s' % (grad, under)
+        elif grad:
+            changes['_major_req'] = '研究生：%s' % grad
+        elif under:
+            changes['_major_req'] = '本科：%s' % under
+        elif major:
+            changes['_major_req'] = major
+    if _clean(j['title']) and not r.get('_title_req'):
+        changes['_title_req'] = _clean(j['title'])
+    if _clean(j['age']) and not r.get('_age_req'):
+        changes['_age_req'] = _clean(j['age'])
+    if _clean(j['political']) and not r.get('_political'):
+        changes['_political'] = _clean(j['political'])
+    if not r.get('_other_req'):
+        changes['_other_req'] = _clean(j['other']) or '不限'
+    if rs_norm and not r.get('rs'):
+        changes['rs'] = rs_norm
+    if j['stage'] and not r.get('st'):
+        changes['st'] = ST_MAP.get(j['stage'], j['stage'])
+    if j['pos'] and not r.get('p'):
+        changes['p'] = j['pos']
+    if j['school'] and not r.get('sc'):
+        changes['sc'] = j['school']
+    return changes
+
+
+def match_jobtable(job_code, db, results, idx_code):
+    """job_code: (c,dist,yr) -> code -> [job rows]。回填现有 / 新增缺失；校拆、多记录、无计划数罗列不动。"""
+    max_rid = max((r.get('_rid') or 0) for r in db)
+    new_records = []
+    for (c, dist, yr), codes in sorted(job_code.items()):
+        print('\n== %s-%s yr=%s (岗位表) %d code' % (c, dist, yr, len(codes)))
+        for code, lst in sorted(codes.items()):
+            hits = idx_code[(c, dist, yr, code)]
+            j = lst[0]
+            schools = {x['school'] for x in lst}
+            if not hits:
+                if not j['pr']:
+                    results['nomatch'].append((code, '岗位表无计划数'))
+                    print('  [无计划数·罗列不动] %s' % code)
+                    continue
+                max_rid += 1
+                rec = build_job_record(j, c, dist, yr, '%s%s%d岗位表' % (c, dist, yr), max_rid)
+                new_records.append(rec)
+                if not DRY:
+                    print('  [新增] %s %s | %s | pr=%d' % (code, rec['sc'][:14], rec['p'], rec['pr']))
+            elif len(hits) == 1:
+                changes = _backfill_job(hits[0], j)
+                if changes:
+                    results['update'].append((hits[0], changes))
+                    if not DRY:
+                        print('  [回填] %s %s' % (code, ', '.join('%s=%s' % (k, v) for k, v in changes.items())))
+                else:
+                    results['nochange'].append(code)
+            else:
+                if len(schools) == 1:
+                    results['dup'].append((code, len(lst), len(hits)))
+                    print('  [重复%d] %s' % (len(hits), code))
+                else:
+                    results['nomatch'].append((code, '校拆'))
+                    print('  [校拆·罗列不动] %s n=%d' % (code, len(lst)))
+    return new_records
+
+
 # ---------------- 匹配+规则 ----------------
 def _apply_hire(r, n, key, results):
     old = r.get('_final_hired')
@@ -341,14 +577,16 @@ def _apply_hire(r, n, key, results):
     elif n == pr:
         if old is not None:
             results['clear'].append(r)
-            print('  [清空] %s n=%d==计划 fh %s→None (%s)' % (key, n, old, (r.get('sc') or '')[:14]))
+            if not DRY:
+                print('  [清空] %s n=%d==计划 fh %s→None (%s)' % (key, n, old, (r.get('sc') or '')[:14]))
         else:
             results['nochange'].append(key)
     else:
         new = max(old or 0, n)
         if new != old:
             results['update'].append((r, {'_final_hired': new}))
-            print('  [更新] %s n=%d fh %s→%s (计划%d %s)' % (key, n, old, new, pr, (r.get('sc') or '')[:14]))
+            if not DRY:
+                print('  [更新] %s n=%d fh %s→%s (计划%d %s)' % (key, n, old, new, pr, (r.get('sc') or '')[:14]))
         else:
             results['nochange'].append(key)
 
@@ -366,10 +604,12 @@ def _apply_scores(r, wc, ic, ms, ts, key, results):
         changes['ts'] = ts
     if changes:
         results['update'].append((r, changes))
-        print('  [更新] %s %s' % (key, ', '.join('%s %s→%s' % (k, r.get(k), v) for k, v in changes.items())))
+        if not DRY:
+            print('  [更新] %s %s' % (key, ', '.join('%s %s→%s' % (k, r.get(k), v) for k, v in changes.items())))
     else:
         results['nochange'].append(key)
-        print('  [不变] %s WC=%s IC=%s MS=%s TS=%s' % (key, wc, ic, ms, ts))
+        if not DRY:
+            print('  [不变] %s WC=%s IC=%s MS=%s TS=%s' % (key, wc, ic, ms, ts))
 
 
 def _match_score_group(typ, key, val, hits, results):
@@ -412,6 +652,8 @@ def _match_score_group(typ, key, val, hits, results):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     dry = '--apply' not in sys.argv
+    global DRY
+    DRY = dry
     if not args:
         print('用法: python scripts/ingest_drop.py <目录> [--apply]')
         return
@@ -440,6 +682,7 @@ def main():
     hire_sch = defaultdict(Counter)                         # (typ,c,d,yr)[(school,)]->count
     score_code = defaultdict(lambda: defaultdict(list))     # (typ,c,d,yr)[code]->[raw rows]
     score_sp = defaultdict(lambda: defaultdict(list))       # (typ,c,d,yr)[(school,pos)]->[raw rows]
+    jobtable_code = defaultdict(lambda: defaultdict(list))  # (c,dist,yr)[code]->[job rows]
 
     skipped = []
     for f in files:
@@ -465,6 +708,15 @@ def main():
             continue
 
         print('%s [%s/%s] c=%s d=%s yr=%s (%d人)' % (f[:40], typ, mode, c, dist, yr, len(raw)))
+
+        if typ == 'jobtable':
+            jobs = extract_jobtable(rows)
+            if not jobs:
+                skipped.append((f, '岗位表无数据'))
+                continue
+            for x in jobs:
+                jobtable_code[(c, dist, yr)][x['code']].append(x)
+            continue
 
         if typ in ('hire', 'physical'):
             for x in raw:
@@ -555,16 +807,19 @@ def main():
     match_hire_sp()
     match_hire_sch()
     match_score()
+    new_records = match_jobtable(jobtable_code, db, results, idx_code)
 
     print('\n' + '=' * 60)
-    print('汇总: 更新=%d 清空=%d 异常=%d 无匹配=%d 重复=%d 不变=%d' % (
-        len(results['update']), len(results['clear']), len(results['abnormal']),
+    print('汇总: 更新=%d 清空=%d 新增=%d 异常=%d 无匹配=%d 重复=%d 不变=%d' % (
+        len(results['update']), len(results['clear']), len(new_records), len(results['abnormal']),
         len(results['nomatch']), len(results['dup']), len(results['nochange'])))
 
     if dry:
         print('\n[DRY-RUN] 未写入 (加 --apply 写入)')
         return
 
+    for rec in new_records:
+        db.append(rec)
     for r, changes in results['update']:
         r.update(changes)
         r['_batch'] = 'current'
@@ -575,7 +830,7 @@ def main():
         r['_batch_label'] = '本次更新'
     new_json = json.dumps(db, ensure_ascii=False, indent=2)
     open(VIEWER, 'w', encoding='utf-8').write(html[:b] + new_json + html[e:])
-    print('[APPLY] 更新=%d 清空=%d, 总记录 %d' % (len(results['update']), len(results['clear']), len(db)))
+    print('[APPLY] 更新=%d 清空=%d 新增=%d, 总记录 %d' % (len(results['update']), len(results['clear']), len(new_records), len(db)))
 
 
 if __name__ == '__main__':
