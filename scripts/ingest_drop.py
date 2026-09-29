@@ -210,7 +210,7 @@ def infer_loc(title):
             return sc, sd, yr
     # 无区县 → 从标题找城市 + 市直
     city = next((c for c in CITIES if c in t), None)
-    if '市教育局直属' in t or '市教育局所属' in t or '市直' in t:
+    if '市教育局直属' in t or '市教育局所属' in t or '市直' in t or '直属学校' in t:
         district = '市直'
     elif '市直属' in t:
         district = '市直属'
@@ -223,7 +223,7 @@ def infer_loc(title):
 
 # ---------------- 文件分类 ----------------
 CODE_KEYS = ['岗位代码', '职位代码', '岗位编号', '岗位编码']
-SCHOOL_KEYS = ['招考单位', '招聘单位', '单位名称', '聘用单位', '拟聘用单位', '报考单位', '工作部门', '主管部门', '学校']
+SCHOOL_KEYS = ['招考单位', '招聘单位', '单位名称', '聘用单位', '拟聘用单位', '报考单位', '工作部门', '主管部门', '学校', '任教单位']
 POS_KEYS = ['岗位名称', '报考岗位', '报考岗位名称', '招聘岗位', '招聘岗位名称']
 
 # ---------------- 岗位表（无姓名/成绩列，有岗位代码+计划数） ----------------
@@ -270,6 +270,8 @@ def classify(rows, fname):
         typ = 'written'
     elif has_iv:
         typ = 'interview'
+    elif has_any(rows, '面试人员') or has_any(rows, '面试安排'):
+        typ = 'interview'  # 面试名单/面试安排（无成绩列，仅列参加面试考生）
     elif find_col(hdr, PLAN_KEYS) is not None and find_col(hdr, ['姓名', '准考证号', '身份证号']) is None:
         typ = 'jobtable'  # 岗位表：有岗位代码+计划数，无姓名列、无成绩列
     else:
