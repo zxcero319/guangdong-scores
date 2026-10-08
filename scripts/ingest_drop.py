@@ -12,7 +12,7 @@
   - IC  综合成绩表→参加面试人数(排除缺考)；面试名单→入围人数；体检/拟聘名单→不可取(0)
   - MS  进面分 = 入围面试者的笔试最低分 min(笔试)，非"全体考生最低分"
   - TS  min(综合成绩 且 进入/入围体检=是)
-  - _final_hired  仅拟聘公示/体检合格名单取; n>pr 异常罗列, n==pr 清None, n<pr max(旧,n)
+  - _final_hired  仅拟聘公示/体检合格名单取; 多批次累加(旧+n): 累计>pr 异常罗列, ==pr 清None, <pr 写累计
   - 年份隔离  所有匹配必须校验 yr（同市同年同码）
   - 城市参与匹配（"市直"在 21 市重复）
 """
@@ -571,24 +571,27 @@ def match_jobtable(job_code, db, results, idx_code):
 
 # ---------------- 匹配+规则 ----------------
 def _apply_hire(r, n, key, results):
+    """拟聘公示累加：多批次分批公示，同一岗位累计 = 旧 _final_hired + 本批 n。
+    例 计划6 前批2 本批1 → 累计3 (显示 6(3))，不是覆盖为 1。
+    """
     old = r.get('_final_hired')
     pr = r.get('pr') or 0
-    if n > pr:
-        results['abnormal'].append((key, n, pr))
-        print('  [异常] %s n=%d>计划%d (%s)' % (key, n, pr, (r.get('sc') or '')[:14]))
-    elif n == pr:
+    total = (old or 0) + n
+    if total > pr:
+        results['abnormal'].append((key, total, pr))
+        print('  [异常] %s 累计%d>计划%d (%s)' % (key, total, pr, (r.get('sc') or '')[:14]))
+    elif total == pr:
         if old is not None:
             results['clear'].append(r)
             if not DRY:
-                print('  [清空] %s n=%d==计划 fh %s→None (%s)' % (key, n, old, (r.get('sc') or '')[:14]))
+                print('  [清空] %s 累计%d==计划 fh %s→None (%s)' % (key, total, old, (r.get('sc') or '')[:14]))
         else:
             results['nochange'].append(key)
     else:
-        new = max(old or 0, n)
-        if new != old:
-            results['update'].append((r, {'_final_hired': new}))
+        if total != old:
+            results['update'].append((r, {'_final_hired': total}))
             if not DRY:
-                print('  [更新] %s n=%d fh %s→%s (计划%d %s)' % (key, n, old, new, pr, (r.get('sc') or '')[:14]))
+                print('  [更新] %s 累计%d fh %s→%s (计划%d %s)' % (key, total, old, total, pr, (r.get('sc') or '')[:14]))
         else:
             results['nochange'].append(key)
 
