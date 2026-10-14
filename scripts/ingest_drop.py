@@ -221,13 +221,21 @@ def infer_loc(title):
     return city, district, yr
 
 
+def code_year(code, fallback):
+    """从岗位代码推断招聘年份：含 20xx 的代码（深圳 LH2025xxx、电白 2026A01 等）取代码内年份，
+    否则回退文件级年份。用于混合年份的拟聘名册（如罗湖 2026 第七批名册混含 LH2025/LH2026 代码，
+    文件名年份 2026 会让 LH2025 代码错配）。"""
+    m = re.search(r'(20\d{2})', str(code or ''))
+    return int(m.group(1)) if m else fallback
+
+
 # ---------------- 文件分类 ----------------
 CODE_KEYS = ['岗位代码', '职位代码', '岗位编号', '岗位编码']
 SCHOOL_KEYS = ['招考单位', '招聘单位', '单位名称', '聘用单位', '拟聘用单位', '报考单位', '工作部门', '主管部门', '学校', '任教单位']
 POS_KEYS = ['岗位名称', '报考岗位', '报考岗位名称', '招聘岗位', '招聘岗位名称']
 
 # ---------------- 岗位表（无姓名/成绩列，有岗位代码+计划数） ----------------
-PLAN_KEYS = ['招聘人数', '计划数', '拟招聘人数', '招聘计划', '岗位数', '拟聘人数', '招聘数', '计划招聘数', '招聘名额']
+PLAN_KEYS = ['招聘人数', '计划数', '拟招聘人数', '招聘计划', '岗位数', '拟聘人数', '招聘数', '计划招聘数', '招聘名额', '人数']
 JOB_EDU_KEYS = ['学历要求', '学历']
 JOB_DEGREE_KEYS = ['学位要求', '学位']
 JOB_MAJOR_KEYS = ['专业要求', '专业', '本科专业', '招聘专业']
@@ -310,7 +318,8 @@ def extract_raw(rows):
         return []
     code_col = find_col(hdr, CODE_KEYS)
     # 「择岗后拟聘用单位」优先于「报考单位」：拟聘公示里报考单位是合并校名，择岗后才是实际学校
-    school_col = find_col(hdr, ['择岗后拟聘用单位', '择岗后聘用单位'])
+    # 「选岗学校/选岗单位」同理（电白拟聘名单「选岗学校」列才是实际任教学校，「毕业学校」在更前会先被「学校」子串误匹配）
+    school_col = find_col(hdr, ['择岗后拟聘用单位', '择岗后聘用单位', '选岗学校', '选岗单位'])
     if school_col is None:
         school_col = find_col(hdr, SCHOOL_KEYS)
     pos_col = find_col(hdr, POS_KEYS)
@@ -421,7 +430,7 @@ def extract_jobtable(rows):
         school = norm_school(cell(school_col, r))
         pos = norm_pos(cell(pos_col, r))
         # 多 sheet 拼合时第二个 sheet 的表头 → 重置继承并跳过
-        if code in HEADER_CODES or (not code and school in HEADER_SCHOOLS and pos in HEADER_POS):
+        if code.replace(' ', '').replace('\n', '') in HEADER_CODES or (not code and school in HEADER_SCHOOLS and pos in HEADER_POS):
             prev_code = prev_school = prev_pos = ''
             continue
         if not code:
@@ -673,10 +682,12 @@ def main():
     idx_code = defaultdict(list)
     idx_sp = defaultdict(list)
     idx_sch = defaultdict(list)
+    school_loc = defaultdict(Counter)  # 学校名 -> Counter((城市,区县))，用于标题无区县时反推
     for r in db:
         idx_code[(r.get('c'), r.get('d'), r.get('yr'), r.get('position_code') or '')].append(r)
         idx_sp[(r.get('d'), r.get('yr'), norm_school(r.get('sc')), norm_pos(r.get('p')))].append(r)
         idx_sch[(r.get('c'), r.get('d'), r.get('yr'), norm_school(r.get('sc')))].append(r)
+        school_loc[norm_school(r.get('sc'))][(r.get('c'), r.get('d'))] += 1
 
     results = {'update': [], 'clear': [], 'abnormal': [], 'nomatch': [], 'dup': [], 'nochange': []}
     files = sorted(f for f in os.listdir(d) if os.path.splitext(f)[1].lower() in ('.xlsx', '.xls', '.pdf'))
@@ -708,6 +719,16 @@ def main():
         if not raw:
             skipped.append((f, '无数据'))
             continue
+        # 学校名反推区县：标题无区县名（如"广东实验中学附属茂名学校"）→ 用名单里的学校名查库
+        if dist is None and c is not None:
+            for x in raw:
+                s = norm_school(x.get('school'))
+                cnt = school_loc.get(s)
+                if cnt:
+                    (bc, bd), _ = cnt.most_common(1)[0]
+                    if bc == c:
+                        dist = bd
+                        break
         if c is None or dist is None or yr is None:
             skipped.append((f, '无法定位 c=%s d=%s yr=%s' % (c, dist, yr)))
             continue
@@ -728,7 +749,8 @@ def main():
                 if typ == 'physical' and '合格' not in (x['ent'] or ''):
                     continue
                 if mode == 'code':
-                    hire_code[(typ, c, dist, yr)][x['code']][x['school']] += 1
+                    xyr = code_year(x['code'], yr)
+                    hire_code[(typ, c, dist, xyr)][x['code']][x['school']] += 1
                 elif mode == 'school_pos':
                     hire_sp[(typ, c, dist, yr)][(x['school'], x['pos'])] += 1
                 elif mode == 'school_only':
@@ -736,7 +758,8 @@ def main():
         else:
             for x in raw:
                 if mode == 'code':
-                    score_code[(typ, c, dist, yr)][x['code']].append(x)
+                    xyr = code_year(x['code'], yr)
+                    score_code[(typ, c, dist, xyr)][x['code']].append(x)
                 elif mode == 'school_pos':
                     score_sp[(typ, c, dist, yr)][(x['school'], x['pos'])].append(x)
 
