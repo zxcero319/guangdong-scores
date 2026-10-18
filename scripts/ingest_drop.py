@@ -221,11 +221,26 @@ def infer_loc(title):
     return city, district, yr
 
 
+def norm_code(code):
+    """从「组名(岗位代码)」列提取括号内纯代码（潮南'报考学科组及岗位代码'=初中英语科2组(2019)→2019）。"""
+    c = str(code or '').strip()
+    m = re.search(r'\((\d+)\)', c)
+    return m.group(1) if m else c
+
+
 def code_year(code, fallback):
     """从岗位代码推断招聘年份：含 20xx 的代码（深圳 LH2025xxx、电白 2026A01 等）取代码内年份，
     否则回退文件级年份。用于混合年份的拟聘名册（如罗湖 2026 第七批名册混含 LH2025/LH2026 代码，
-    文件名年份 2026 会让 LH2025 代码错配）。"""
-    m = re.search(r'(20\d{2})', str(code or ''))
+    文件名年份 2026 会让 LH2025 代码错配）。
+
+    防误判（2026-10-18 修复）：
+      - 纯 4 位 20xx（潮南岗位码 2019/2021/2024/2028/2031）本身是岗位号非年份 → 回退
+      - 20xx 被数字/中文/括号前缀（季华 262002 里的 2002、组名(2019)）→ 回退
+    """
+    s = str(code or '').strip()
+    if re.fullmatch(r'20\d{2}', s):
+        return fallback
+    m = re.search(r'(?:(?<=^)|(?<=[A-Za-z]))(20\d{2})', s)
     return int(m.group(1)) if m else fallback
 
 
@@ -340,7 +355,7 @@ def extract_raw(rows):
     prev_code = prev_school = prev_pos = ''
     for r in rows[hi + 1:]:
         name = cell(name_col, r)
-        code = cell(code_col, r)
+        code = norm_code(cell(code_col, r))
         if not name and not code:
             continue
         school = norm_school(cell(school_col, r))
