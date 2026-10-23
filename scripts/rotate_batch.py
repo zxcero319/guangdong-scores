@@ -31,7 +31,9 @@ def main():
 
     n_expire = 0
     for r in data:
-        if r.get('_batch') == 'active' and r.get('_reg_end', '') < TODAY:
+        reg_end = r.get('_reg_end', '') or ''
+        # 日期未定(待定/空/非日期)的记录保留，不归库；仅真正过期(日期<今天)才归库
+        if r.get('_batch') == 'active' and reg_end and reg_end[0].isdigit() and reg_end < TODAY:
             r['_batch'] = ''
             r['_batch_label'] = ''
             n_expire += 1
