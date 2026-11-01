@@ -71,7 +71,7 @@ def main():
     m = DATE_RE.search(vhtml)
     old_date = m.group(1) if m else None
     if old_date and old_date != today:
-        vhtml = vhtml.replace(old_date, today)
+        vhtml = vhtml.replace('数据截止 ' + old_date, '数据截止 ' + today)
         open(VIEWER, 'w', encoding='utf-8').write(vhtml)
         print(f'  日期: {old_date} → {today}')
     else:
@@ -115,7 +115,7 @@ def main():
     # ── 5. index.html ──
     ihtml = open(INDEX, encoding='utf-8').read()
     if old_date and old_date != today:
-        ihtml = ihtml.replace(old_date, today)
+        ihtml = ihtml.replace('数据截止 ' + old_date, '数据截止 ' + today)
 
     old_meta = re.search(r'var CITY_META = \{.*?\};', ihtml, re.DOTALL)
     if old_meta:
