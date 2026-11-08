@@ -58,7 +58,7 @@ DISTRICT_MAP = {
     '吴川市': '湛江', '坡头区': '湛江', '廉江市': '湛江', '徐闻县': '湛江', '经开区': '湛江',
     '赤坎区': '湛江', '遂溪县': '湛江', '雷州市': '湛江', '霞山区': '湛江', '麻章区': '湛江',
     '湘桥区': '潮州', '潮安区': '潮州', '饶平县': '潮州',
-    '斗门区': '珠海', '金湾区': '珠海', '高新区': '珠海',
+    '斗门区': '珠海', '金湾区': '珠海', '高新区': '珠海', '横琴': '珠海',
     '四会市': '肇庆', '封开县': '肇庆', '广宁县': '肇庆', '德庆县': '肇庆', '怀集县': '肇庆',
     '端州区': '肇庆', '高要区': '肇庆', '鼎湖区': '肇庆',
     '信宜市': '茂名', '化州市': '茂名', '电白区': '茂名', '茂南区': '茂名', '高州市': '茂名',
@@ -289,6 +289,8 @@ def classify(rows, fname):
         typ = 'physical'
     elif has_ts:
         typ = 'scores'  # 有综合/总成绩列 → 综合成绩表 (即使无笔试, 如体育教练员直接考核)
+    elif '资格复审' in fname:
+        typ = 'recheck'  # 资格复审名单=面试入围名单(带笔试成绩)，WC 不可取，IC=入围人数 MS=min(笔试)
     elif has_ms:
         typ = 'written'
     elif has_iv:
@@ -645,6 +647,7 @@ def _match_score_group(typ, key, val, hits, results):
     """按文件类型计算 wc/ic/ms/ts，再匹配。
     - scores(综合成绩表): WC=0(不取), IC=参加面试人数(有面试分), MS=min(笔试), TS=min(总 且 进入体检=是)
     - written(笔试成绩表): WC=完整笔试名单(排除缺考), MS=min(笔试), IC/TS 不取
+    - recheck(资格复审名单): WC=0(不可取), IC=入围人数, MS=min(笔试), TS 不取
     - interview(面试名单): IC=人数, WC/MS/TS 不取
     """
     if not hits:
@@ -668,6 +671,12 @@ def _match_score_group(typ, key, val, hits, results):
         ms_vals = [x['ms'] for x in val if x['ms'] is not None]
         ms = min(ms_vals) if ms_vals else None
         ic = ts = None
+    elif typ == 'recheck':
+        wc = None  # 资格复审名单不是完整笔试名单 → WC 不可取
+        ic = len(val)  # 入围面试人数
+        ms_vals = [x['ms'] for x in val if x['ms'] is not None]
+        ms = min(ms_vals) if ms_vals else None
+        ts = None
     elif typ == 'interview':
         wc = ms = ts = None
         ic = len(val)
