@@ -89,6 +89,16 @@ def norm_pos(p):
     return p
 
 
+def edu_group(v):
+    """学历/学历要求 → 研究生/本科/''（本科及以上、大专及以上都归「本科」组，用于校岗+学历消歧）。"""
+    v = (v or '').strip()
+    if not v:
+        return ''
+    if any(k in v for k in ('研究生', '硕士', '博士')):
+        return '研究生'
+    return '本科'
+
+
 def to_float(v):
     try:
         return float(norm(v))
@@ -187,6 +197,7 @@ def has_any(rows, kw):
 # 学校名 → (城市, 区县) 覆盖：标题仅含"佛山市XX中学"而无区县名时（如季华中学在三水区）
 SCHOOL_DISTRICT = {
     '季华中学': ('佛山', '三水区'),
+    '广东实验中学': ('省直', '省直'),
 }
 
 
@@ -247,19 +258,19 @@ def code_year(code, fallback):
 # ---------------- 文件分类 ----------------
 CODE_KEYS = ['岗位代码', '职位代码', '岗位编号', '岗位编码']
 SCHOOL_KEYS = ['招考单位', '招聘单位', '单位名称', '聘用单位', '拟聘用单位', '报考单位', '工作部门', '主管部门', '学校', '任教单位']
-POS_KEYS = ['岗位名称', '报考岗位', '报考岗位名称', '招聘岗位', '招聘岗位名称']
+POS_KEYS = ['岗位名称', '报考岗位', '报考岗位名称', '招聘岗位', '招聘岗位名称', '拟聘岗位', '拟聘用岗位']
 
 # ---------------- 岗位表（无姓名/成绩列，有岗位代码+计划数） ----------------
 PLAN_KEYS = ['招聘人数', '计划数', '拟招聘人数', '招聘计划', '岗位数', '拟聘人数', '招聘数', '计划招聘数', '招聘名额', '人数']
 JOB_EDU_KEYS = ['学历要求', '学历']
 JOB_DEGREE_KEYS = ['学位要求', '学位']
 JOB_MAJOR_KEYS = ['专业要求', '专业', '本科专业', '招聘专业']
-JOB_GRAD_MAJOR_KEYS = ['研究生专业', '研究生方向']
-JOB_UNDER_MAJOR_KEYS = ['本科专业']
-JOB_TITLE_KEYS = ['教师资格', '教师资格证', '教资', '教师资格要求']
+JOB_GRAD_MAJOR_KEYS = ['研究生专业', '研究生方向', '专业要求（研究生）', '研究生']
+JOB_UNDER_MAJOR_KEYS = ['本科专业', '专业要求（本科）', '本科']
+JOB_TITLE_KEYS = ['教师资格', '教师资格证', '教资', '教师资格要求', '执业资格要求', '执业资格', '职业资格']
 JOB_AGE_KEYS = ['年龄要求', '年龄']
 JOB_POLITICAL_KEYS = ['政治面貌']
-JOB_OTHER_KEYS = ['其他要求', '备注', '其他条件']
+JOB_OTHER_KEYS = ['其他要求', '备注', '其他条件', '其它条件']
 JOB_RS_KEYS = ['考生类别', '招聘对象', '招聘范围', '报考类别', '招聘对象类别', '人员类别']
 JOB_STAGE_KEYS = ['学段', '岗位类别', '招聘学段', '学段要求']
 ST_MAP = {'幼儿园': '幼儿', '初中': '初中', '高中': '高中', '小学': '小学', '中职': '中职', '特殊教育': '特殊教育', '高校': '高校'}
@@ -293,6 +304,8 @@ def classify(rows, fname):
         typ = 'recheck'  # 资格复审名单=面试入围名单(带笔试成绩)，WC 不可取，IC=入围人数 MS=min(笔试)
     elif has_ms:
         typ = 'written'
+    elif '进入笔试' in fname or '笔试名单' in fname:
+        typ = 'written'  # 笔试名单（无成绩列，仅列进入笔试的考生，WC=全员）
     elif has_iv:
         typ = 'interview'
     elif has_any(rows, '面试人员') or has_any(rows, '面试安排'):
@@ -344,6 +357,7 @@ def extract_raw(rows):
         code_col = school_col  # 化州拟聘名单'报考单位'列实存岗位代码
         school_col = None
     name_col = find_col(hdr, ['姓名', '准考证号', '身份证号', '身份证号码', '考生姓名'])
+    edu_col = find_col(hdr, ['学历', '学历学位'])
     ms_col = find_col(hdr, ['笔试成绩'])
     iv_col = find_col(hdr, ['面试成绩'])
     ts_col = find_ts_col(hdr)
@@ -381,7 +395,8 @@ def extract_raw(rows):
             code=code, school=school, pos=pos,
             ms=to_float(cell(ms_col, r)), iv=cell(iv_col, r),
             ts=to_float(cell(ts_col, r)),
-            ent=cell(ent_col, r) or cell(note_col, r)))
+            ent=cell(ent_col, r) or cell(note_col, r),
+            edu=cell(edu_col, r)))
     return raw
 
 
@@ -390,15 +405,15 @@ def infer_su(p):
     """从岗位名推断学科；幼儿园/特殊教育无学科 → ''"""
     if not p or '幼儿园' in p or '特殊教育' in p:
         return ''
-    m = re.sub(r'^(初中|高中|小学|中职|特殊教育)', '', p)
+    m = re.sub(r'^(初中|高中|中学|小学|中职|特殊教育)', '', p)
     m = re.sub(r'教师$', '', m)
     return m
 
 
 def infer_st(p, stage_col):
-    if stage_col:
-        return ST_MAP.get(stage_col, stage_col)
-    for k in ['高中', '初中', '小学', '幼儿', '中职', '特殊教育', '高校']:
+    if stage_col and stage_col in ST_MAP:
+        return ST_MAP[stage_col]
+    for k in ['高中', '初中', '中学', '小学', '幼儿', '中职', '特殊教育', '高校']:
         if k in p:
             return '幼儿' if k == '幼儿' else k
     return ''
@@ -414,7 +429,21 @@ def extract_jobtable(rows):
     if hdr is None:
         return []
 
-    def col(keys): return find_col(hdr, keys)
+    # 双行表头（深圳岗位表：第一行组名「岗位属性/岗位条件」、第二行子列名「岗位名称/学历/学位/专业」）
+    # 合并两行后按列名找列；数据行在「岗位代码」列有值（G001/FT2025023C0001），子表头行该列为空。
+    hdr2 = rows[hi + 1] if hi + 1 < len(rows) else []
+    _sub_keys = ('岗位名称', '学历', '学位', '专业', '招聘岗位职责', '岗位类别', '岗位等级', '考生户籍', '其它条件', '其他条件')
+    _code_idx = find_col(hdr, CODE_KEYS)
+    _hdr2_code = norm(hdr2[_code_idx]) if (_code_idx is not None and _code_idx < len(hdr2)) else ''
+    is_subheader = (bool(hdr2) and not _hdr2_code
+                    and any(any(k in norm(c) for k in _sub_keys) for c in hdr2))
+    if is_subheader:
+        merged = [norm(hdr[i] if i < len(hdr) else '') + norm(hdr2[i] if i < len(hdr2) else '')
+                  for i in range(max(len(hdr), len(hdr2)))]
+    else:
+        merged = list(hdr)
+
+    def col(keys): return find_col(merged, keys)
     code_col = col(CODE_KEYS)
     school_col = col(SCHOOL_KEYS)
     pos_col = col(POS_KEYS)
@@ -425,8 +454,8 @@ def extract_jobtable(rows):
     grad_col = col(JOB_GRAD_MAJOR_KEYS)
     under_col = col(JOB_UNDER_MAJOR_KEYS)
     # 「专业要求」合并表头跨两列（本科|研究生），第二列表头为空 → 拆为本科/研究生两列
-    if grad_col is None and under_col is None and major_col is not None and major_col + 1 < len(hdr):
-        if not norm(hdr[major_col + 1]):
+    if grad_col is None and under_col is None and major_col is not None and major_col + 1 < len(merged):
+        if not norm(merged[major_col + 1]):
             under_col = major_col
             grad_col = major_col + 1
             major_col = None
@@ -443,7 +472,7 @@ def extract_jobtable(rows):
     out = []
     prev_code = prev_school = prev_pos = ''
     for r in rows[hi + 1:]:
-        code = cell(code_col, r)
+        code = re.sub(r'\s+', '', cell(code_col, r))
         school = norm_school(cell(school_col, r))
         pos = norm_pos(cell(pos_col, r))
         # 多 sheet 拼合时第二个 sheet 的表头 → 重置继承并跳过
@@ -468,11 +497,11 @@ def extract_jobtable(rows):
             pr = 0
         out.append(dict(
             code=code, school=school, pos=pos, pr=pr,
-            edu=cell(edu_col, r), degree=cell(degree_col, r),
+            edu=re.sub(r'\s+', '', cell(edu_col, r)), degree=re.sub(r'\s+', '', cell(degree_col, r)),
             major=cell(major_col, r), grad=cell(grad_col, r), under=cell(under_col, r),
             title=cell(title_col, r), age=cell(age_col, r),
             political=cell(political_col, r), other=cell(other_col, r),
-            rs=cell(rs_col, r), stage=cell(stage_col, r)))
+            rs=re.sub(r'\s+', '', cell(rs_col, r)), stage=cell(stage_col, r)))
     return out
 
 
@@ -564,9 +593,11 @@ def match_jobtable(job_code, db, results, idx_code):
     for (c, dist, yr), codes in sorted(job_code.items()):
         print('\n== %s-%s yr=%s (岗位表) %d code' % (c, dist, yr, len(codes)))
         for code, lst in sorted(codes.items()):
-            hits = idx_code[(c, dist, yr, code)]
             j = lst[0]
-            schools = {x['school'] for x in lst}
+            schools = {norm_school(x['school']) for x in lst}
+            all_hits = idx_code[(c, dist, yr, code)]
+            # 跨招聘串码：同码不同校（湛江市直 A01 多校复用）→ 按校名过滤，校不匹配视为新增
+            hits = [r for r in all_hits if norm_school(r.get('sc') or '') in schools]
             if not hits:
                 if not j['pr']:
                     results['nomatch'].append((code, '岗位表无计划数'))
@@ -650,6 +681,10 @@ def _match_score_group(typ, key, val, hits, results):
     - recheck(资格复审名单): WC=0(不可取), IC=入围人数, MS=min(笔试), TS 不取
     - interview(面试名单): IC=人数, WC/MS/TS 不取
     """
+    # 跨招聘串码：同码不同校（湛江市直 A01 多校复用）→ 按候选人校名过滤
+    val_schools = {norm_school(x.get('school') or '') for x in val} - {''}
+    if val_schools:
+        hits = [r for r in hits if norm_school(r.get('sc') or '') in val_schools]
     if not hits:
         results['nomatch'].append((key, len(val)))
         print('  [无匹配] %s (%d人)' % (key, len(val)))
@@ -667,9 +702,13 @@ def _match_score_group(typ, key, val, hits, results):
         ts_vals = [x['ts'] for x in val if x['ts'] is not None and ('进入体检' in (x['ent'] or '') or '是' in (x['ent'] or ''))]
         ts = min(ts_vals) if ts_vals else None
     elif typ == 'written':
-        wc = sum(1 for x in val if x['ms'] is not None)  # 排除缺考
         ms_vals = [x['ms'] for x in val if x['ms'] is not None]
-        ms = min(ms_vals) if ms_vals else None
+        if ms_vals:
+            wc = len(ms_vals)  # 笔试成绩表：排除缺考（无成绩）
+            ms = min(ms_vals)
+        else:
+            wc = len(val)  # 笔试名单（无成绩列）：全员计入
+            ms = None
         ic = ts = None
     elif typ == 'recheck':
         wc = None  # 资格复审名单不是完整笔试名单 → WC 不可取
@@ -776,7 +815,8 @@ def main():
                     xyr = code_year(x['code'], yr)
                     hire_code[(typ, c, dist, xyr)][x['code']][x['school']] += 1
                 elif mode == 'school_pos':
-                    hire_sp[(typ, c, dist, yr)][(x['school'], x['pos'])] += 1
+                    eg = edu_group(x.get('edu'))
+                    hire_sp[(typ, c, dist, yr)][(x['school'], x['pos'], eg)] += 1
                 elif mode == 'school_only':
                     hire_sch[(typ, c, dist, yr)][(x['school'],)] += 1
         else:
@@ -820,21 +860,39 @@ def main():
 
     def match_hire_sp():
         for (typ, c, dist, yr), sp in sorted(hire_sp.items()):
-            print('\n== %s-%s yr=%s (%s, 校岗匹配) %d 组' % (c, dist, yr, typ, len(sp)))
-            for (s, p), n in sorted(sp.items()):
+            # 按 (school,pos) 聚合学历组（学历用于消歧：同校岗研究生/本科两行、归雁空学历 vs 岗位表）
+            by_sp = defaultdict(Counter)
+            for (s, p, eg), n in sp.items():
+                by_sp[(s, p)][eg] += n
+            print('\n== %s-%s yr=%s (%s, 校岗匹配) %d 组' % (c, dist, yr, typ, len(by_sp)))
+            for (s, p), edu_counts in sorted(by_sp.items()):
+                key = '%s|%s' % (s[:10], p)
+                total = sum(edu_counts.values())
                 if re.match(r'^(小学|初中|高中|中职)?体育$', p):
-                    results['nomatch'].append((s, p, n))
-                    print('  [体育专项待核] %s|%s n=%d (无专项, 无法匹配)' % (s[:14], p, n))
+                    results['nomatch'].append((s, p, total))
+                    print('  [体育专项待核] %s|%s n=%d (无专项, 无法匹配)' % (s[:14], p, total))
                     continue
                 hits = idx_sp[(dist, yr, s, p)]
                 if not hits:
-                    results['nomatch'].append((s, p, n))
-                    print('  [无匹配] %s|%s n=%d' % (s[:14], p, n))
+                    results['nomatch'].append((s, p, total))
+                    print('  [无匹配] %s|%s n=%d' % (s[:14], p, total))
                 elif len(hits) == 1:
-                    _apply_hire(hits[0], n, '%s|%s' % (s[:10], p), results)
+                    _apply_hire(hits[0], total, key, results)
                 else:
-                    results['dup'].append((s, p, n, len(hits)))
-                    print('  [重复%d] %s|%s n=%d' % (len(hits), s[:14], p, n))
+                    # 多记录：按学历消歧（研究生→研究生行、本科/大专→本科以上行；空学历记录如归雁不匹配）
+                    remaining = list(hits)
+                    matched = False
+                    for eg, n in sorted(edu_counts.items()):
+                        if not eg:
+                            continue
+                        cands = [r for r in remaining if edu_group(r.get('_edu_req')) == eg]
+                        if len(cands) == 1:
+                            _apply_hire(cands[0], n, key, results)
+                            remaining.remove(cands[0])
+                            matched = True
+                    if not matched:
+                        results['dup'].append((s, p, total, len(hits)))
+                        print('  [重复%d] %s|%s n=%d' % (len(hits), s[:14], p, total))
 
     def match_hire_sch():
         # 校-only（无代码无岗位名）一律罗列不动：按学校匹配无法精确到岗位，自动写入会猜错
